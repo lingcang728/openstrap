@@ -536,6 +536,8 @@ internal fun SmallCard(
     waiting: Boolean = false,
     /** How far toward its goal or usual, 0..1, for a [EdgeKind.Progress] Small's bar ([EdgeCard]). */
     progress: Float? = null,
+    /** The number as plain text ([GlowType.smallValue]), for a Small that breaks down the card beside it. */
+    plain: Boolean = false,
 ) {
     EdgeCard(color, modifier, status = edgeStatus, kind = kind, progress = progress, onClick = onClick) {
         CardTitle(title)
@@ -546,7 +548,11 @@ internal fun SmallCard(
             return@EdgeCard
         }
         Row(verticalAlignment = Alignment.Bottom) {
-            if (value != null) DotMatrixText(value, Modifier.cardNumber(value), dot = DotSize.Edge) else WaitingDash(Modifier.padding(vertical = 8.dp))
+            when {
+                value == null -> WaitingDash(Modifier.padding(vertical = 8.dp))
+                plain -> Text(value, Modifier.cardNumber(value), color = Color.White, style = GlowType.smallValue, maxLines = 1)
+                else -> DotMatrixText(value, Modifier.cardNumber(value), dot = DotSize.Edge)
+            }
             if (unit != null && value != null) Text(unit, color = Color.White.copy(alpha = 0.7f), style = GlowType.secondary, modifier = Modifier.padding(start = 6.dp))
         }
         extra?.invoke()

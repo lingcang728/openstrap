@@ -160,13 +160,15 @@ steps with the thousands comma ("8,432", the dot font has the comma), breathing 
 Breathing disturbances are "an hour" on the Wide and the Small.
 
 **One dotted number per card.** A card has at most one number in dots, its answer. Times, ranges, totals and second
-figures are text in Body or Secondary. A list has one per row. This holds everywhere: the sleep hero (5.2), the Sleep
+figures are text in Body or Secondary. List rows never use dots: a row's value is plain Row value text (Sans 500,
+20 on 24, tabular), and a Small that breaks down the card beside it (Recharged, Drained) is plain Display 300, 34.
+This holds everywhere: the sleep hero (5.2), the Sleep
 score detail, Your week (steps a day in dots, sleep and workouts as text under it), the workout pages (6.3). Six dot sizes, the gap between dots 0.38 of the
 dot:
 
 | Dot | Where |
 |---|---|
-| 2.4 dp | List row values |
+| 2.4 dp | Four or more figures side by side (`FigureRow`) |
 | 3 dp | Edge cards, Smalls |
 | 3.6 dp | Talls, second glow, glow cards that aren't the hero |
 | 4.5 dp | The hero's number |
@@ -283,7 +285,7 @@ Static. The edge only changes when the data changes.
 optional note in Secondary right).
 
 `ListRow`: the metric's **icon**, 20 dp, stroke 1.5, in the metric's ink, then 14 dp to the name (Body) with its
-status (Secondary) under it, the value in 2.4 dp dots right-aligned in its own column, and the caret when the row
+status (Secondary) under it, the value as plain Row value text right-aligned in its own column, and the caret when the row
 opens something. The name stays white, and on one line in every list row (a settings row on You and Strap too):
 where a row's name and the value on its right don't both fit, as in a narrow list beside a pane, the value drops under
 the name in Secondary, ellipsized only as the last resort. The
@@ -587,7 +589,7 @@ Rows in order. Sizes per 2.4, tiers per 2.5.
 | Midday | Energy: sentence, value with `lightLevel`, recharged and drained | Strip: Last night collapsed. Edge: Steps (ghost line), Heart rate. List "Right now" (stress, HRV). Edge: Recovery (left edge) |
 | Workout window | "Ready for effort. You usually run around now." Start button, Other sport | Second glow: Energy (wide), a level glow, the light filling across from the left to the value (Recovery's battery on its side). List "Before you start" (Load today, time to recover). Edge: Steps. Strip: Last night |
 | After a workout | "Since your run, 40 min. Heart rate settling." Drop curve into your resting range (a dim band), calm glow | Edge: the workout (left, with its zone bar). Small pair: Load (from below, its bar filling toward your usual day's Load) and To recover (flips to the top). Second glow: Energy, as in the workout window, with its line so far. Edge: Steps |
-| Evening | "A full day. A run, 13,860 steps and a Load above your usual." Steps, Load, Energy left. "Bedtime in 1 h 10". Dim mood | Second glow: Energy, as in the workout window. Edge: Steps (line so far), Heart rate (the day's line, flips to the top under Steps unless live). Strip: Last night |
+| Evening | "A full day. A run, past your step goal and a Load above your usual." The steps said against the goal, since the count is in dots under it. Load only in the sentence and Energy only on its card right under the hero; with that card hidden in Edit Today, "Energy 31 left" as the last line. "Bedtime in 1 h 10". Dim mood | Second glow: Energy, as in the workout window. Edge: Steps (line so far), Heart rate (the day's line, flips to the top under Steps unless live). Strip: Last night |
 | Night | As evening, Night mood | As evening |
 | During a workout | The workout, live heart rate | As midday without Heart rate (the hero has it) |
 

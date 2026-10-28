@@ -466,7 +466,7 @@ internal fun WorkoutRow(a: WorkoutAnalysis, usual: Float?, divider: Boolean, onC
                 )
             }
             Spacer(Modifier.width(12.dp))
-            DotMatrixText(workoutClock(a.activeSeconds), dot = DotSize.Row, color = Color.White)
+            Text(workoutClock(a.activeSeconds), color = Color.White, style = GlowType.rowValue, maxLines = 1)
             Spacer(Modifier.width(RowCaretGap))
             TapCaret(ROW_CARET_ALPHA)
         }

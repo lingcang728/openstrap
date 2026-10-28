@@ -84,10 +84,12 @@ private fun Caption(text: String, modifier: Modifier = Modifier) =
 
 /** A chart's title inside a detail's body, with an optional [note] on the right. */
 @Composable
-private fun ChartTitle(title: String, note: String?, modifier: Modifier = Modifier) {
+private fun ChartTitle(title: String, note: String?, modifier: Modifier = Modifier, scrubbed: DetailHeadline? = null) {
     Row(modifier.fillMaxWidth().padding(top = 18.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(title, color = Color.White, style = GlowType.cardTitle, maxLines = 1, modifier = Modifier.weight(1f))
-        if (note != null) Text(note, color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary)
+        // While the line is scrubbed, its reading takes the note's place, in white so it reads as the live value.
+        if (scrubbed != null) Text("${scrubbed.value} ${scrubbed.label}", color = Color.White, style = GlowType.secondary, maxLines = 1)
+        else if (note != null) Text(note, color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary)
     }
 }
 
@@ -234,7 +236,8 @@ private fun StageBars(b: Summaries.SleepBreakdown, modifier: Modifier = Modifier
 
 /**
  * The night's heart rate and breathing as lines with scrub (chart kit), each scrub moving the detail's headline
- * ([onScrub], null on release). Either is left out without readings.
+ * ([onScrub], null on release). Either is left out without readings. They sit below the fold, where the headline has
+ * scrolled away, so a scrub also puts the reading in the line's own title row.
  */
 @Composable
 private fun NightLines(state: DayUiState, window: LongRange, onScrub: (DetailHeadline?) -> Unit) {
@@ -242,14 +245,16 @@ private fun NightLines(state: DayUiState, window: LongRange, onScrub: (DetailHea
     val breath = state.breathRate.filter { it.x in window }
     if (hr.isEmpty() && breath.isEmpty()) return
     val labels = listOf(clock(window.first), clock(window.last))
+    var hrAt by remember(window) { mutableStateOf<DetailHeadline?>(null) }
+    var breathAt by remember(window) { mutableStateOf<DetailHeadline?>(null) }
     Column {
         if (hr.isNotEmpty()) {
-            ChartTitle("Heart rate", "Lowest ${hr.minOf { it.y }.toInt()}, average ${hr.map { it.y }.average().toInt()} bpm")
-            ScrubLine(hr, window, 130.dp, labels, MetricColors.heart, "bpm") { onScrub(it) }
+            ChartTitle("Heart rate", "Lowest ${hr.minOf { it.y }.toInt()}, average ${hr.map { it.y }.average().toInt()} bpm", scrubbed = hrAt)
+            ScrubLine(hr, window, 130.dp, labels, MetricColors.heart, "bpm") { hrAt = it; onScrub(it) }
         }
         if (breath.isNotEmpty()) {
-            ChartTitle("Breathing rate", "Average %.1f br/min".format(breath.map { it.y }.average()))
-            ScrubLine(breath, window, 100.dp, labels, MetricColors.sleepLight, "br/min", decimals = 1) { onScrub(it) }
+            ChartTitle("Breathing rate", "Average %.1f br/min".format(breath.map { it.y }.average()), scrubbed = breathAt)
+            ScrubLine(breath, window, 100.dp, labels, MetricColors.sleepLight, "br/min", decimals = 1) { breathAt = it; onScrub(it) }
         }
     }
 }

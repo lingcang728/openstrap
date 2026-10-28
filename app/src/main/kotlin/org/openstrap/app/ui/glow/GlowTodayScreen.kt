@@ -241,6 +241,7 @@ fun GlowTodayScreen(
                                             running, onOpenRunning, onResumeRunning, onStartSport, onOtherSport, onPair, onSyncNow,
                                             onOpenRecovery, onOpenWorkout, onRetryRecovery,
                                             onOpenScore = { onOpen(org.openstrap.app.ui.dashboard.Detail.OfScore(it)) },
+                                            energyHidden = slots.none { it.card == TodayCard.Charge },
                                         )
                                         TodayCard.EditToday -> EditTodayButton({ editing = true })
                                         else -> TodayRow(slot, ctx, healthspan, history, checkIn, onCheckIn, onOpenMetric,
@@ -369,6 +370,8 @@ private fun Hero(
      * heroes, as the Charge battery on Recovery does.
      */
     onOpenScore: (org.openstrap.app.ui.dashboard.Score) -> Unit,
+    /** The Energy card is hidden in Edit Today, so the evening hero says Energy itself. */
+    energyHidden: Boolean = false,
 ) {
     val onOpenCharge = { onOpenScore(org.openstrap.app.ui.dashboard.Score.Charge) }
     // Every hero is as high as its content with the card padding around it. The floor is only a Wide's height, under
@@ -405,7 +408,7 @@ private fun Hero(
             HeroKind.NoSleep -> ChargeHero(ctx, onOpenCharge, onRetryRecovery, m, noSleep = true)
             HeroKind.Window -> WindowHero(ctx, lightAngle, onStartSport, onOtherSport, m)
             HeroKind.After -> AfterHero(ctx, lightAngle, onOpenWorkout, m)
-            HeroKind.Evening -> EveningHero(ctx, lightAngle, bedtime, onOpenRecovery, m)
+            HeroKind.Evening -> EveningHero(ctx, lightAngle, bedtime, energyHidden, onOpenRecovery, m)
             HeroKind.During -> (running ?: lastRunning.value)?.let { DuringHero(ctx, it, onOpenRunning, onResumeRunning, m) }
         }
     }
@@ -594,12 +597,13 @@ private fun AfterHero(ctx: TodayContext, lightAngle: Float?, onOpenWorkout: (Lon
 }
 
 /**
- * Evening and night: the day in a sentence, the steps in dots with Load and Charge left as text beside them, and how
+ * Evening and night: the day in a sentence (Load in it), the steps in dots, Energy left under them only when
+ * [energyHidden] (its card, normally right under the hero, is hidden in Edit Today), and how
  * long until your usual bedtime. Evening violet from the lower right in the evening, Sleep blue from below at night
  * (spec 4.2), each in its mood.
  */
 @Composable
-private fun EveningHero(ctx: TodayContext, lightAngle: Float?, bedtime: LocalTime?, onOpen: () -> Unit, modifier: Modifier) {
+private fun EveningHero(ctx: TodayContext, lightAngle: Float?, bedtime: LocalTime?, energyHidden: Boolean, onOpen: () -> Unit, modifier: Modifier) {
     val goals = LocalGoals.current
     val nouns = ctx.dayWorkouts.map { sportNoun(it.workout.sportType) }
     val night = ctx.moment == Moment.Night
@@ -608,11 +612,17 @@ private fun EveningHero(ctx: TodayContext, lightAngle: Float?, bedtime: LocalTim
     GlowCard(if (night) style else style.copy(bodyLightness = EVENING_BODY), modifier, onClick = onOpen) {
         Column {
             GlowHeader("Today", trailing = TodayCopy.bedtimeIn(LocalTime.now(), bedtime), marker = ctx.upTo(ctx.newest), tag = ctx.partial)
-            HeroSentence(TodayCopy.evening(nouns, ctx.state.steps, goals.steps, ctx.loadStatus))
+            // The count is in dots below, so the sentence says the steps against the goal instead.
+            HeroSentence(TodayCopy.evening(nouns, ctx.state.steps, goals.steps, ctx.loadStatus, stepCount = false))
             Spacer(Modifier.height(24.dp))
-            // Figures it doesn't have yet are left out, never a lone dash in the hero.
-            val rest = listOfNotNull(ctx.rec?.load?.let { "Load ${Math.round(it)}" }, ctx.charge?.let { "Energy $it left" })
-            HeroNumber("%,d".format(ctx.state.steps), listOfNotNull("steps", rest.joinToString(", ").ifEmpty { null }))
+            HeroNumber("%,d".format(ctx.state.steps), listOf("steps"))
+            // Load is said in the sentence, and Energy has its own card right under the hero. Only with that card
+            // hidden in Edit Today does Energy come back here, last and full width, never a lone dash.
+            val energy = ctx.charge?.takeIf { energyHidden }
+            if (energy != null) Text(
+                "Energy $energy left", color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary,
+                maxLines = 1, modifier = Modifier.padding(top = 10.dp),
+            )
         }
     }
 }

@@ -300,7 +300,7 @@ private fun ChargeSmall(c: Recovery.ChargeDay?, recharged: Boolean, modifier: Mo
         recharged -> TabCopy.RECHARGED
         else -> TabCopy.drainedMostly(c!!.drainedExercise, c.drainedStress, c.drainedLiving)
     }
-    SmallCard(MetricColors.charge, if (recharged) "Recharged" else "Drained", value, null, status, modifier)
+    SmallCard(MetricColors.charge, if (recharged) "Recharged" else "Drained", value, null, status, modifier, plain = true)
 }
 
 /** Averages charge samples into evenly spaced buckets across [range]; empty buckets are gaps. */
