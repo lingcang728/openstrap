@@ -55,6 +55,8 @@ fun YouPage(
     onBack: () -> Unit,
     /** The row whose page is open beside the list on a wide screen, by its title ("Profile"), or null. */
     selected: String? = null,
+    /** Automatic backup's rows ([AutoBackupRows]), under Your data. */
+    autoBackup: (@Composable () -> Unit)? = null,
 ) {
     BackHandler(onBack = onBack)
     ScreenList(contentPadding, gutter = GlowLayout.Gutter) {
@@ -75,6 +77,7 @@ fun YouPage(
                 PageRow("Restore from Health Connect", "Bring back what OpenStrap saved there", onClick = onRestoreHealthConnect, below = true, icon = AppIcons.ArrowCounterClockwise)
             }
         }
+        if (autoBackup != null) item { autoBackup() }
         item {
             PageRows {
                 PageRow("Diagnostics", "$logLines lines, for bug reports", onClick = onDiagnostics, below = true, divider = false, icon = AppIcons.Bug, selected = selected == "Diagnostics")

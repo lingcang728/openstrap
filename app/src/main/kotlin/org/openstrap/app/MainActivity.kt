@@ -706,6 +706,13 @@ private fun AppRoot(
     val csvImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(deviceVm::importCsv)
     }
+    // Automatic backup: the folder picker (a cancel leaves it as it was) and Restore from a backup, opening on it.
+    val backupFolderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri?.let(deviceVm::chooseBackupFolder)
+    }
+    val backupRestoreLauncher = rememberLauncherForActivityResult(org.openstrap.app.ui.device.PickBackup()) { uri ->
+        uri?.let(deviceVm::importCsv)
+    }
     val hcReadLauncher = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { granted ->
         if (granted.any { it in container.healthConnect.readPermissions }) deviceVm.importHealthConnect()
         else Toast.makeText(context, "Health Connect permissions were not granted.", Toast.LENGTH_LONG).show()
@@ -1061,6 +1068,19 @@ private fun AppRoot(
                                 onSampleData = if (org.openstrap.app.data.SampleData.AVAILABLE) ({ deviceVm.loadSampleData() }) else null,
                                 onBack = onBack,
                                 selected = selected?.row,
+                                autoBackup = {
+                                    val backup by deviceVm.backup.collectAsStateWithLifecycle()
+                                    val backingUp by deviceVm.backingUp.collectAsStateWithLifecycle()
+                                    val folder = backup.folder?.let(android.net.Uri::parse)
+                                    org.openstrap.app.ui.device.AutoBackupRows(
+                                        backup, backingUp,
+                                        onTurnOn = { backupFolderLauncher.launch(null) },
+                                        onTurnOff = { deviceVm.turnOffBackup() },
+                                        onFolder = { backupFolderLauncher.launch(folder) },
+                                        onBackUpNow = { deviceVm.backUpNow() },
+                                        onRestore = { backupRestoreLauncher.launch(folder) },
+                                    )
+                                },
                             )
                         },
                     )

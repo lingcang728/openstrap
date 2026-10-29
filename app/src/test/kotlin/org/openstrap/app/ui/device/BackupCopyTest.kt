@@ -1,0 +1,36 @@
+package org.openstrap.app.ui.device
+
+import org.junit.Assert.assertEquals
+import org.junit.Test
+import org.openstrap.app.data.settings.BackupState
+import org.openstrap.app.export.AutoBackup
+import org.openstrap.app.export.BackupFiles
+import java.time.ZoneId
+import java.util.Locale
+
+class BackupCopyTest {
+    private val utc = ZoneId.of("UTC")
+    private val now = 1792195200L + 20 * 3600 // 2026-10-17T20:00Z
+    private val on = BackupState("content://tree", "Drive backups", null, null, null)
+
+    private fun status(s: BackupState) = BackupCopy.status(s, now, utc, Locale.UK)
+
+    @Test fun `the row says off, waiting, when it last ran, or why it failed`() {
+        assertEquals("Off. A zip each day in a folder you choose", status(BackupState(null, null, null, null, null)))
+        assertEquals("Each day while the phone charges. No backup yet", status(on))
+        assertEquals("Last backup today at 03:12", status(on.copy(lastDone = 1792195200L + 3 * 3600 + 12 * 60)))
+        assertEquals("Last backup yesterday at 23:50", status(on.copy(lastDone = 1792195200L - 600)))
+        assertEquals("Last backup on Wed 14 Oct", status(on.copy(lastDone = 1792195200L - 3 * 86_400L)))
+        assertEquals(
+            "Last backup failed. The folder is no longer available.",
+            status(on.copy(lastDone = 1792195200L, failed = BackupFiles.Failure.FolderGone, failedAt = now)),
+        )
+    }
+
+    @Test fun `every failure and outcome has its words`() {
+        for (f in BackupFiles.Failure.entries) BackupCopy.failure(f)
+        assertEquals("Backed up as OpenStrap-backup-2026-10-17.zip.", BackupCopy.outcome(AutoBackup.Outcome.Done("OpenStrap-backup-2026-10-17.zip")))
+        assertEquals("Couldn't back up. There isn't enough space for it.", BackupCopy.outcome(AutoBackup.Outcome.Failed(BackupFiles.Failure.NoSpace)))
+        assertEquals("The folder you chose", BackupCopy.folder(on.copy(folderName = null)))
+    }
+}
