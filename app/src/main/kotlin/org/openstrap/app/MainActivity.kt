@@ -162,6 +162,10 @@ class MainActivity : ComponentActivity() {
             intent.removeExtra(EXTRA_OPEN_STRAP)
             strapRequests.value = true
         }
+        if (intent.getBooleanExtra(EXTRA_OPEN_UPDATES, false)) {
+            intent.removeExtra(EXTRA_OPEN_UPDATES)
+            (application as OpenStrapApp).container.updater.openRequest.value = true
+        }
         intent.getStringExtra(EXTRA_OPEN_METRIC)?.let { route ->
             val day = intent.getStringExtra(EXTRA_METRIC_DAY)?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
             intent.removeExtra(EXTRA_OPEN_METRIC)
@@ -210,6 +214,9 @@ class MainActivity : ComponentActivity() {
 
         /** True opens the Strap page over the tab showing: a widget's status line while the strap isn't paired or is low. */
         const val EXTRA_OPEN_STRAP = "open_strap"
+
+        /** True opens the Updates page over the tab showing: an update notification's tap. */
+        const val EXTRA_OPEN_UPDATES = "open_updates"
 
         /** Debug: a [StrapPreview] name ("stale", "stuck", "disconnected", "charging", "notpaired", "recoveryfail") to show, or "auto". */
         const val EXTRA_STRAP_STATE = "strap_state"
@@ -366,7 +373,7 @@ private enum class Page(
     /** The row on the You or Strap page that opens this page, marked while it's open beside the list on a wide screen. */
     val row: String? = null,
 ) {
-    You, Profile("Profile"), HealthConnect("Health Connect"), Backup("Backup"), Diagnostics("Diagnostics"),
+    You, Profile("Profile"), HealthConnect("Health Connect"), Backup("Backup"), Updates("Updates"), Diagnostics("Diagnostics"),
     Strap, Alarms("Alarms"), PhoneAlerts("Phone alerts"), HealthAlerts("Health alerts"), Firmware("Firmware"), ZeppAccount("Zepp account"),
 }
 
@@ -542,6 +549,15 @@ private fun AppRoot(
             allMetricsOpen = false
             if (pages.lastOrNull() != Page.Strap && (pages.isEmpty() || closePages())) openPage(Page.Strap)
             strapRequests.value = false
+        }
+    }
+    // An update notification: the Updates page, over the You page as its row opens it.
+    val updatesRequest by container.updater.openRequest.collectAsStateWithLifecycle()
+    LaunchedEffect(updatesRequest) {
+        if (updatesRequest) {
+            allMetricsOpen = false
+            if (pages.lastOrNull() != Page.Updates && (pages.isEmpty() || closePages())) pages = listOf(Page.You, Page.Updates)
+            container.updater.openRequest.value = false
         }
     }
     // An auto-detected workout's notification: that workout, on the Activity tab, its home.
@@ -1081,6 +1097,7 @@ private fun AppRoot(
                             val log by container.strap.log.collectAsStateWithLifecycle()
                             val hcAuto by deviceVm.healthConnectAuto.collectAsStateWithLifecycle()
                             val backup by deviceVm.backup.collectAsStateWithLifecycle()
+                            val updates by container.updater.state.collectAsStateWithLifecycle()
                             // Permissions can be taken back in Health Connect while away: the row says so on return.
                             androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { deviceVm.checkAutoHealthConnect(); onPauseOrDispose { } }
                             org.openstrap.app.ui.device.YouPage(
@@ -1091,6 +1108,9 @@ private fun AppRoot(
                                 onHealthConnect = { open(Page.HealthConnect) },
                                 backup = backup,
                                 onBackup = { open(Page.Backup) },
+                                updates = updates,
+                                installedVersion = container.updater.installed,
+                                onUpdates = { open(Page.Updates) },
                                 onDiagnostics = { open(Page.Diagnostics) },
                                 onSampleData = if (org.openstrap.app.data.SampleData.AVAILABLE) ({ deviceVm.loadSampleData() }) else null,
                                 onBack = onBack,
@@ -1129,6 +1149,33 @@ private fun AppRoot(
                                         onRestore = { backupRestoreLauncher.launch(folder) },
                                         onSaveCopy = { csvLauncher.launch("openstrap-export.zip") },
                                         onBack = onBack,
+                                    )
+                                }
+                                Page.Updates -> {
+                                    val updater = container.updater
+                                    val updates by updater.state.collectAsStateWithLifecycle()
+                                    val auto by container.settings.updateAuto.collectAsStateWithLifecycle(true)
+                                    val workoutNow by container.workout.state.collectAsStateWithLifecycle()
+                                    // Back from Android's "Install unknown apps" switch: on, the install goes ahead.
+                                    var waiting by remember { mutableStateOf<org.openstrap.app.update.Release?>(null) }
+                                    val allowLauncher = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) {
+                                        waiting?.let { r -> if (updater.canInstall()) updater.install(r) }
+                                        waiting = null
+                                    }
+                                    val uri = androidx.compose.ui.platform.LocalUriHandler.current
+                                    org.openstrap.app.ui.device.UpdatesPage(
+                                        updates, updater.installed, auto, workoutNow is org.openstrap.app.device.WorkoutState.Recording, padding,
+                                        onInstall = { r ->
+                                            when {
+                                                r.apk == null -> uri.openUri(r.page)
+                                                updater.canInstall() -> updater.install(r)
+                                                else -> { waiting = r; allowLauncher.launch(updater.allowInstalls) }
+                                            }
+                                        },
+                                        onCheck = updater::checkNow,
+                                        onAuto = updater::setAuto,
+                                        onGitHub = { uri.openUri(org.openstrap.app.update.Releases.PAGE) },
+                                        onBack = { updater.dismissFailure(); onBack() },
                                     )
                                 }
                                 else -> Unit
@@ -1281,7 +1328,7 @@ private fun OverPages(
             Page.PhoneAlerts -> org.openstrap.app.ui.alarms.PhoneAlertsScreen(container.phoneAlerts, container.settings, padding, onBack = close)
             Page.Firmware -> FirmwareScreen(firmwareVm, padding, onBack = close, onZeppAccount = { open(Page.ZeppAccount) })
             Page.ZeppAccount -> org.openstrap.app.ui.firmware.ZeppAccountScreen(firmwareVm, padding, onBack = close)
-            Page.HealthConnect, Page.Backup -> dataPage(shown, close)
+            Page.HealthConnect, Page.Backup, Page.Updates -> dataPage(shown, close)
             Page.Profile -> org.openstrap.app.ui.device.ProfileScreen(profile, padding, onSave = { deviceVm.saveProfile(it); close() }, onBack = close)
             Page.Diagnostics -> {
                 val log by container.strap.log.collectAsStateWithLifecycle()

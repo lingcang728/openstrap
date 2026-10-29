@@ -41,6 +41,7 @@ object SettingsBackup {
         "workout_sides" to Type.STRING,
         "buzz_pattern" to Type.STRING,
         "call_buzz" to Type.STRING,
+        "update_auto" to Type.BOOLEAN,
     )
 
     /** The backed-up keys of [values] as JSON; anything else in it is left out. */
