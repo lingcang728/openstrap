@@ -52,13 +52,15 @@ fun HealthConnectPage(
 }
 
 /**
- * Opens Health Connect on OpenStrap's own data and permissions, or on its main settings where that screen isn't there.
- * False when neither opens (Health Connect missing or disabled).
+ * Opens Health Connect's home, where OpenStrap is one tap away under Your health apps, or its Data and access screen
+ * where the home isn't there. False when neither opens (Health Connect missing or disabled). OpenStrap's own
+ * permissions screen (MANAGE_HEALTH_PERMISSIONS) can't be opened directly: it needs GRANT_RUNTIME_PERMISSIONS, which
+ * only system apps hold.
  */
 fun openHealthConnect(context: Context): Boolean {
     val intents = listOf(
-        { HealthConnectClient.getHealthConnectManageDataIntent(context) },
         { Intent(HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS) },
+        { HealthConnectClient.getHealthConnectManageDataIntent(context) },
     )
     return intents.any { make ->
         runCatching { context.startActivity(make().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
