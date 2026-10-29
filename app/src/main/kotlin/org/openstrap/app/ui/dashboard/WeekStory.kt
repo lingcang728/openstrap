@@ -104,7 +104,7 @@ internal object WeekStory {
             if (d.steps != null || line != null) { rows += Row(name(d), d.steps, line); i++; continue }
             var j = i
             while (j + 1 < days.size && days[j + 1].steps == null && dayLine(days[j + 1]) == null) j++
-            rows += Row(if (j == i) name(d) else "${name(d)} to ${name(days[j])}", null, tr(R.string.week_story_nothing_recorded))
+            rows += Row(if (j == i) name(d) else tr(R.string.missed_day_range, name(d), name(days[j])), null, tr(R.string.week_story_nothing_recorded))
             i = j + 1
         }
         return rows
