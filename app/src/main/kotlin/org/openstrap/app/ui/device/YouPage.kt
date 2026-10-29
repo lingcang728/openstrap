@@ -23,16 +23,20 @@ import org.openstrap.app.ui.glow.PageHeader
 import org.openstrap.app.ui.glow.PageRow
 import org.openstrap.app.ui.glow.PageRows
 import org.openstrap.app.ui.theme.AppIcons
+import org.openstrap.app.R
+import org.openstrap.app.tr
+import org.openstrap.app.trRaw
 
 /** "7 h 30", or "8 h" on the hour. */
-fun hoursMinutes(minutes: Int): String = if (minutes % 60 == 0) "${minutes / 60} h" else "${minutes / 60} h ${"%02d".format(minutes % 60)}"
+fun hoursMinutes(minutes: Int): String =
+    if (minutes % 60 == 0) tr(R.string.missed_duration_h, minutes / 60) else tr(R.string.missed_duration_h_m, minutes / 60, "%02d".format(minutes % 60))
 
 /** The Goals row's value: "8,000 steps, 300 active kcal, 8 active hours". */
 fun goalsLine(goals: Goals): String = "%,d steps, %,d active kcal, %d active hours".format(goals.steps, goals.calories, goals.activeHours)
 
 /** The Sleep goal row's value, with the sleep need Recovery uses beside it: "7 h 30. Your sleep need is 8 h". */
 fun sleepGoalLine(goals: Goals, needMinutes: Int): String =
-    "${hoursMinutes(goals.sleepMinutes)}. Your sleep need is ${hoursMinutes(needMinutes)}"
+    tr(R.string.you_page_your_sleep_need_is, hoursMinutes(goals.sleepMinutes), hoursMinutes(needMinutes))
 
 /**
  * The auto sync row's value: on and when it last wrote ("On. Last synced 10:42", "yesterday 10:42", "12 Oct"), off,
@@ -106,23 +110,23 @@ fun YouPage(
 ) {
     BackHandler(onBack = onBack)
     ScreenList(contentPadding, gutter = GlowLayout.Gutter) {
-        item { PageHeader("You", onBack) }
+        item { PageHeader(tr(R.string.common_you), onBack) }
         item {
             PageRows {
-                PageRow("Profile", profile.summary(), onClick = onProfile, below = true, divider = false, icon = AppIcons.User, selected = selected == "Profile")
-                PageRow("Goals", goalsLine(goals), onClick = onGoals, below = true, icon = AppIcons.Target)
-                PageRow("Sleep goal", sleepGoalLine(goals, sleepNeedMinutes), onClick = onGoals, below = true, icon = AppIcons.Moon)
+                PageRow(tr(R.string.common_profile), profile.summary(), onClick = onProfile, below = true, divider = false, icon = AppIcons.User, selected = selected == tr(R.string.common_profile))
+                PageRow(tr(R.string.you_page_goals), goalsLine(goals), onClick = onGoals, below = true, icon = AppIcons.Target)
+                PageRow(tr(R.string.you_page_sleep_goal), sleepGoalLine(goals, sleepNeedMinutes), onClick = onGoals, below = true, icon = AppIcons.Moon)
             }
         }
-        item { PanelHeading("Your data") }
+        item { PanelHeading(tr(R.string.you_page_your_data)) }
         item {
             PageRows {
                 // Read again whenever either changes, so "today" and "yesterday" follow the last one.
                 val now = remember(healthConnectAuto, backup) { System.currentTimeMillis() / 1000 }
                 val zone = java.time.ZoneId.systemDefault()
                 PageRow(
-                    "Health Connect", healthConnectSummary(healthConnectAuto, now, zone), onClick = onHealthConnect, below = true, divider = false,
-                    icon = AppIcons.Heartbeat, selected = selected == "Health Connect",
+                    tr(R.string.you_page_health_connect), healthConnectSummary(healthConnectAuto, now, zone), onClick = onHealthConnect, below = true, divider = false,
+                    icon = AppIcons.Heartbeat, selected = selected == tr(R.string.you_page_health_connect),
                 )
                 PageRow("Backup", BackupCopy.summary(backup, now, zone), onClick = onBackup, below = true, icon = AppIcons.ShieldCheck, selected = selected == "Backup")
             }
@@ -132,16 +136,16 @@ fun YouPage(
             PageRows {
                 val now = remember(updates) { System.currentTimeMillis() / 1000 }
                 PageRow(
-                    "Updates", UpdateCopy.summary(updates, installedVersion, now), onClick = onUpdates, below = true, divider = false,
-                    icon = AppIcons.ArrowCircleUp, selected = selected == "Updates", dot = updateWaiting,
+                    tr(R.string.firmware_screen_updates), UpdateCopy.summary(updates, installedVersion, now), onClick = onUpdates, below = true, divider = false,
+                    icon = AppIcons.ArrowCircleUp, selected = selected == tr(R.string.firmware_screen_updates), dot = updateWaiting,
                 )
-                PageRow("Diagnostics", "$logLines lines, for bug reports", onClick = onDiagnostics, below = true, icon = AppIcons.Bug, selected = selected == "Diagnostics")
-                if (onSampleData != null) PageRow("Load sample data", "Debug builds only", onClick = onSampleData, below = true, icon = AppIcons.Flask)
+                PageRow(tr(R.string.common_diagnostics), "$logLines lines, for bug reports", onClick = onDiagnostics, below = true, icon = AppIcons.Bug, selected = selected == "Diagnostics")
+                if (onSampleData != null) PageRow(tr(R.string.you_page_load_sample_data), tr(R.string.you_page_debug_builds_only), onClick = onSampleData, below = true, icon = AppIcons.Flask)
             }
         }
         item {
             Text(
-                "OpenStrap ${BuildConfig.VERSION_NAME}. Everything stays on this phone.",
+                tr(R.string.you_page_openstrap_everything_stays_on, BuildConfig.VERSION_NAME),
                 Modifier.fillMaxWidth().padding(top = 4.dp),
                 color = Color.White.copy(alpha = 0.45f), style = GlowType.secondary, textAlign = TextAlign.Center,
             )

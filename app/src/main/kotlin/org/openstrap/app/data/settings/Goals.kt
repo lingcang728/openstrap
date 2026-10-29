@@ -1,5 +1,9 @@
 package org.openstrap.app.data.settings
 
+import org.openstrap.app.R
+import org.openstrap.app.tr
+import org.openstrap.app.trRaw
+
 /** Your daily targets. The defaults are the app's old fixed goals, and the strap's 300 for calories. */
 data class Goals(
     val steps: Int = DEFAULT_STEPS,

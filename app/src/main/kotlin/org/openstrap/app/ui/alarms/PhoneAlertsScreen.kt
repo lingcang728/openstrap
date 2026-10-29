@@ -49,13 +49,15 @@ import org.openstrap.app.ui.glow.PageSwitchRow
 import androidx.compose.ui.graphics.Color
 import org.openstrap.app.ui.glow.GlowSegments
 import org.openstrap.app.ui.theme.MetricColors
+import org.openstrap.app.R
+import org.openstrap.app.tr
 
 /** What the Strap page's Phone alerts row says: "Calls and notifications", "Calls", "Notifications" or "Off". */
 fun phoneAlertsSummary(calls: Boolean, notifications: Boolean): String = when {
-    calls && notifications -> "Calls and notifications"
-    calls -> "Calls"
-    notifications -> "Notifications"
-    else -> "Off"
+    calls && notifications -> tr(R.string.phone_alerts_screen_calls_and_notifications)
+    calls -> tr(R.string.phone_alerts_screen_calls)
+    notifications -> tr(R.string.phone_alerts_screen_notifications)
+    else -> tr(R.string.common_off)
 }
 
 /** "22:00" for minutes after midnight. */
@@ -110,11 +112,11 @@ fun PhoneAlertsScreen(alerts: PhoneAlerts, settings: SettingsStore, contentPaddi
     }
 
     ScreenList(contentPadding, gutter = GlowLayout.Gutter) {
-        item { PageHeader("Phone alerts", onBack) }
+        item { PageHeader(tr(R.string.common_phone_alerts), onBack) }
         item {
             PagePanel {
                 PageSwitchRow(
-                    "Incoming calls", "Buzzes while your phone rings. App calls like WhatsApp need notification access.",
+                    tr(R.string.phone_alerts_screen_incoming_calls), "Buzzes while your phone rings. App calls like WhatsApp need notification access.",
                     calls && callPermission,
                     { on ->
                         when {
@@ -127,35 +129,35 @@ fun PhoneAlertsScreen(alerts: PhoneAlerts, settings: SettingsStore, contentPaddi
                 )
                 if (calls && callPermission) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Call buzz", style = GlowType.body, color = Color.White)
+                        Text(tr(R.string.phone_alerts_screen_call_buzz), style = GlowType.body, color = Color.White)
                         // Picking one plays it for a few seconds, so the two can be compared on the wrist.
                         GlowSegments(CallBuzz.entries.map { it.label }, callStyle.ordinal, { i ->
                             val style = CallBuzz.entries[i]
                             scope.launch {
                                 settings.setCallBuzzStyle(style)
-                                callPreviewError = runCatching { alerts.previewCall(style) }.exceptionOrNull()?.let { it.message ?: "Couldn't buzz the strap" }
+                                callPreviewError = runCatching { alerts.previewCall(style) }.exceptionOrNull()?.let { it.message ?: tr(R.string.common_couldn_t_buzz_the) }
                             }
                         })
                         callPreviewError?.let { PageNote(it, color = MetricColors.warn) }
                     }
                 }
-                PageSwitchRow("Notifications", "Buzzes for notifications that make a sound.", notifications && notificationAccess, { on ->
+                PageSwitchRow(tr(R.string.phone_alerts_screen_notifications), "Buzzes for notifications that make a sound.", notifications && notificationAccess, { on ->
                     scope.launch { settings.setBuzzOnNotifications(on) }
                     if (on && !notificationAccess) openNotificationAccess()
                 })
                 if (notifications && !notificationAccess) {
                     PageNote("Needs notification access.", color = MetricColors.warn)
-                    PageButton("Open settings", openNotificationAccess, Modifier.fillMaxWidth())
+                    PageButton(tr(R.string.phone_alerts_screen_open_settings), openNotificationAccess, Modifier.fillMaxWidth())
                 }
                 if (notifications && notificationAccess) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Buzz pattern", style = GlowType.body, color = Color.White)
+                        Text(tr(R.string.phone_alerts_screen_buzz_pattern), style = GlowType.body, color = Color.White)
                         // Picking a pattern plays it once, so it can be felt before the next notification.
                         GlowSegments(BuzzPattern.entries.map { it.label }, pattern.ordinal, { i ->
                             val p = BuzzPattern.entries[i]
                             scope.launch {
                                 settings.setNotificationPattern(p)
-                                previewError = runCatching { alerts.preview(p) }.exceptionOrNull()?.let { it.message ?: "Couldn't buzz the strap" }
+                                previewError = runCatching { alerts.preview(p) }.exceptionOrNull()?.let { it.message ?: tr(R.string.common_couldn_t_buzz_the) }
                             }
                         })
                         previewError?.let { PageNote(it, color = MetricColors.warn) }

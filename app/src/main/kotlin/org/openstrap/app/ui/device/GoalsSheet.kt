@@ -41,6 +41,8 @@ import org.openstrap.app.ui.glow.GlowType
 import org.openstrap.app.ui.glow.PageButton
 import org.openstrap.app.ui.glow.PageNote
 import org.openstrap.app.ui.glow.PageSheet
+import org.openstrap.app.R
+import org.openstrap.app.tr
 import org.openstrap.app.ui.glow.RoundButton
 import org.openstrap.app.ui.theme.AppIcons
 import org.openstrap.app.ui.theme.MetricColors
@@ -64,22 +66,22 @@ fun GoalsSheet(goals: Goals, onSave: (Goals) -> Unit, onDismiss: () -> Unit, sug
         ?.takeIf { it in Goals.SLEEP_MINUTES }
     val activeValue = active.toIntOrNull()?.takeIf { it in Goals.ACTIVE_HOURS }
 
-    PageSheet(onDismiss, "Your goals", note = "What you aim for each day. Change them whenever they stop fitting.") {
-        NumberField(steps, { steps = it }, "Steps", "steps", stepsValue == null)
+    PageSheet(onDismiss, tr(R.string.goals_sheet_your_goals), note = tr(R.string.goals_sheet_what_you_aim_for)) {
+        NumberField(steps, { steps = it }, tr(R.string.common_steps), tr(R.string.missed_unit_steps), stepsValue == null)
         CalorieGoalField(calories, { calories = it }, suggestedCalories)
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Sleep", color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary)
+            Text(tr(R.string.common_sleep), color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                NumberField(sleepH, { sleepH = it.take(2) }, "", "h", sleepValue == null, Modifier.weight(1f))
-                NumberField(sleepM, { sleepM = it.take(2) }, "", "min", sleepValue == null, Modifier.weight(1f))
+                NumberField(sleepH, { sleepH = it.take(2) }, "", tr(R.string.missed_unit_h), sleepValue == null, Modifier.weight(1f))
+                NumberField(sleepM, { sleepM = it.take(2) }, "", tr(R.string.missed_unit_min), sleepValue == null, Modifier.weight(1f))
             }
         }
-        NumberField(active, { active = it.take(2) }, "Active hours", "of 24", activeValue == null)
-        PageNote("An active hour is one with at least 250 steps.")
+        NumberField(active, { active = it.take(2) }, tr(R.string.goals_sheet_active_hours), tr(R.string.goals_sheet_of), activeValue == null)
+        PageNote(tr(R.string.goals_sheet_an_active_hour_is))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            PageButton("Cancel", onDismiss, Modifier.weight(1f))
+            PageButton(tr(R.string.common_cancel), onDismiss, Modifier.weight(1f))
             PageButton(
-                "Save", { onSave(Goals(stepsValue!!, sleepValue!!, activeValue!!, calories)) }, Modifier.weight(1f),
+                tr(R.string.common_save), { onSave(Goals(stepsValue!!, sleepValue!!, activeValue!!, calories)) }, Modifier.weight(1f),
                 enabled = stepsValue != null && sleepValue != null && activeValue != null, primary = true,
             )
         }
