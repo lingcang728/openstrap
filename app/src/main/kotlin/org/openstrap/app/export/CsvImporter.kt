@@ -15,12 +15,15 @@ import java.util.zip.ZipInputStream
  * OpenStrap, on the phone or by the backup, stays deleted: its row and the sport effect deleted with it are left out, so
  * its heart rate is too. Restoring twice changes nothing. Runs as one transaction, so a zip that fails part way changes
  * nothing. Files this version doesn't know are skipped, and a backup from before deleted workouts were kept restores as
- * it did.
+ * it did. The settings file isn't written here: [Result.settings] carries it.
  */
 class CsvImporter(private val db: OpenStrapDatabase, private val zone: ZoneId = ZoneId.systemDefault()) {
 
-    /** What one restore did: rows added per file, rows left out as the strap's days have them, and rows unreadable. */
-    data class Result(val rows: Map<String, Int>, val present: Int, val skipped: Int) {
+    /**
+     * What one restore did: rows added per file, rows left out as the strap's days have them, and rows unreadable.
+     * [settings] is the zip's [SettingsBackup.FILE] as is, for the caller to restore; null in a zip from before it.
+     */
+    data class Result(val rows: Map<String, Int>, val present: Int, val skipped: Int, val settings: String? = null) {
         val total get() = rows.values.sum()
     }
 
@@ -37,12 +40,17 @@ class CsvImporter(private val db: OpenStrapDatabase, private val zone: ZoneId = 
         val deletable = mutableListOf<Pair<CsvTable<*>, List<String>>>()
         var present = 0
         var skipped = 0
+        var settings: String? = null
         fun count(table: CsvTable<*>, o: Outcome) {
             counts[table.file] = o.stored; present += o.present; skipped += o.bad
         }
         ZipInputStream(input).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
+                if (entry.name.substringAfterLast('/') == SettingsBackup.FILE) {
+                    settings = zip.readBytes().toString(Charsets.UTF_8)
+                    continue
+                }
                 val table = tables[entry.name.substringAfterLast('/')] ?: continue
                 // Only this entry's bytes, without closing the zip (a Reader's readLines would close it).
                 val lines = zip.readBytes().toString(Charsets.UTF_8).lines().filter { it.isNotBlank() }
@@ -63,7 +71,7 @@ class CsvImporter(private val db: OpenStrapDatabase, private val zone: ZoneId = 
         for ((table, lines) in children) count(table, table.backfill(lines, added))
         // Throwing rolls back, so a zip that isn't ours leaves the database untouched.
         if (counts.isEmpty()) throw IllegalArgumentException("This isn't an OpenStrap export.")
-        Result(counts, present, skipped)
+        Result(counts, present, skipped, settings)
     }
 
     /** Writes the rows of [lines] that fall before the phone's first day for this table, less those timed at [gone]. */
