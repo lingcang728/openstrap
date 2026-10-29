@@ -180,7 +180,8 @@ fun PageRows(modifier: Modifier = Modifier, content: @Composable ColumnScope.() 
  * [trailing] replaces the value on the right (a switch). [divider] draws
  * the hairline above it. [icon] sits quietly on the left, centred on the row, with the title and value lined up after it.
  * A row that opens something ([onClick], no [trailing]) ends in the tap caret (spec 2.5). [selected] marks the row
- * whose page is open beside the list on a wide screen: tinted across the panel's width.
+ * whose page is open beside the list on a wide screen: tinted across the panel's width. [dot] puts a [NoticeDot]
+ * after the title of a [below] row: something new waits behind it.
  */
 @Composable
 fun PageRow(
@@ -193,6 +194,7 @@ fun PageRow(
     enabled: Boolean = true,
     icon: ImageVector? = null,
     selected: Boolean = false,
+    dot: Boolean = false,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(
@@ -216,7 +218,11 @@ fun PageRow(
             Spacer(Modifier.width(14.dp))
         }
         if (below) Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            RowName(title, titleColor)
+            if (dot) Row(verticalAlignment = Alignment.CenterVertically) {
+                RowName(title, titleColor)
+                Spacer(Modifier.width(8.dp))
+                NoticeDot()
+            } else RowName(title, titleColor)
             if (value != null) Text(value, color = RowValueColor, style = GlowType.secondary)
         } else RowNameValue(title, titleColor, value.takeIf { trailing == null }, Modifier.weight(1f))
         if (trailing != null) {
@@ -227,6 +233,16 @@ fun PageRow(
             TapCaret(ROW_CARET_ALPHA)
         }
     }
+}
+
+/**
+ * Something new waits behind what it sits on (a new version, on the avatar and the Updates row): a small white dot,
+ * the size of the strap chip's, with a [ring] of the background around it where it overlaps a button's edge.
+ */
+@Composable
+fun NoticeDot(modifier: Modifier = Modifier, ring: Color? = null) {
+    if (ring == null) Box(modifier.size(7.dp).background(Color.White, CircleShape))
+    else Box(modifier.size(11.dp).background(ring, CircleShape).padding(2.dp).background(Color.White, CircleShape))
 }
 
 /** A row's value in Secondary, on the right or under the name. */

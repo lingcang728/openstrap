@@ -891,6 +891,7 @@ private fun AppRoot(
                     editGoals = false
                 }, onDismiss = { editGoals = false })
             }
+            val updateWaiting by container.updater.waiting.collectAsStateWithLifecycle()
             // The header on every tab: the moment on Today (a past day's name for a past day), the tab's name elsewhere.
             val header: @Composable (Tab) -> Unit = { t ->
                 MomentHeader(
@@ -903,6 +904,7 @@ private fun AppRoot(
                     // All metrics is hidden for now (spec 3.1). Passing { allMetricsOpen = true } brings the button
                     // back; the sheet opens over whatever shows, and no tab hears of it (spec 3.2).
                     onOpenAllMetrics = null,
+                    updateWaiting = updateWaiting,
                 )
             }
             // What a tab's stack shows on top: the same screens on every tab, each pushing onto the stack it's on.
@@ -1098,6 +1100,7 @@ private fun AppRoot(
                             val hcAuto by deviceVm.healthConnectAuto.collectAsStateWithLifecycle()
                             val backup by deviceVm.backup.collectAsStateWithLifecycle()
                             val updates by container.updater.state.collectAsStateWithLifecycle()
+                            val updateWaiting by container.updater.waiting.collectAsStateWithLifecycle()
                             // Permissions can be taken back in Health Connect while away: the row says so on return.
                             androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { deviceVm.checkAutoHealthConnect(); onPauseOrDispose { } }
                             org.openstrap.app.ui.device.YouPage(
@@ -1110,6 +1113,7 @@ private fun AppRoot(
                                 onBackup = { open(Page.Backup) },
                                 updates = updates,
                                 installedVersion = container.updater.installed,
+                                updateWaiting = updateWaiting,
                                 onUpdates = { open(Page.Updates) },
                                 onDiagnostics = { open(Page.Diagnostics) },
                                 onSampleData = if (org.openstrap.app.data.SampleData.AVAILABLE) ({ deviceVm.loadSampleData() }) else null,
@@ -1156,6 +1160,8 @@ private fun AppRoot(
                                     val updates by updater.state.collectAsStateWithLifecycle()
                                     val auto by container.settings.updateAuto.collectAsStateWithLifecycle(true)
                                     val workoutNow by container.workout.state.collectAsStateWithLifecycle()
+                                    // Seen: the dots on the avatar and the Updates row go, and again for a release found while it's open.
+                                    LaunchedEffect(org.openstrap.app.update.Releases.newer(updates.releases, updater.installed).firstOrNull()?.tag) { updater.markSeen() }
                                     // Back from Android's "Install unknown apps" switch: on, the install goes ahead.
                                     var waiting by remember { mutableStateOf<org.openstrap.app.update.Release?>(null) }
                                     val allowLauncher = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) {

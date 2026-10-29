@@ -531,6 +531,7 @@ class SettingsStore(private val context: Context) {
     private val updateCheckedKey = longPreferencesKey("update_checked_at")
     private val updateNotifiedKey = stringPreferencesKey("update_notified_tag")
     private val updateInstallingKey = stringPreferencesKey("update_installing_tag")
+    private val updateSeenKey = stringPreferencesKey("update_seen_tag")
 
     /** The daily check for a new OpenStrap release on GitHub ([org.openstrap.app.update.AppUpdater]). On unless turned off. */
     val updateAuto: Flow<Boolean> = context.dataStore.data.map { it[updateAutoKey] ?: true }
@@ -551,6 +552,13 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setUpdateNotified(tag: String) {
         context.dataStore.edit { it[updateNotifiedKey] = tag }
+    }
+
+    /** The tag of the newest release the Updates page has shown, so its dot on the avatar goes once it's been seen. */
+    val updateSeen: Flow<String?> = context.dataStore.data.map { it[updateSeenKey] }
+
+    suspend fun setUpdateSeen(tag: String) {
+        context.dataStore.edit { it[updateSeenKey] = tag }
     }
 
     /** The tag of the release handed to Android to install, until the new version starts; null when none. */

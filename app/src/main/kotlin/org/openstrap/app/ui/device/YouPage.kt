@@ -95,6 +95,8 @@ fun YouPage(
     /** New versions from GitHub, said on its row; the row opens the Updates page. */
     updates: org.openstrap.app.update.UpdateState,
     installedVersion: String,
+    /** A new version the Updates page hasn't shown yet: a dot after the row's name. */
+    updateWaiting: Boolean,
     onUpdates: () -> Unit,
     onDiagnostics: () -> Unit,
     onSampleData: (() -> Unit)?,
@@ -131,7 +133,7 @@ fun YouPage(
                 val now = remember(updates) { System.currentTimeMillis() / 1000 }
                 PageRow(
                     "Updates", UpdateCopy.summary(updates, installedVersion, now), onClick = onUpdates, below = true, divider = false,
-                    icon = AppIcons.ArrowCircleUp, selected = selected == "Updates",
+                    icon = AppIcons.ArrowCircleUp, selected = selected == "Updates", dot = updateWaiting,
                 )
                 PageRow("Diagnostics", "$logLines lines, for bug reports", onClick = onDiagnostics, below = true, icon = AppIcons.Bug, selected = selected == "Diagnostics")
                 if (onSampleData != null) PageRow("Load sample data", "Debug builds only", onClick = onSampleData, below = true, icon = AppIcons.Flask)
