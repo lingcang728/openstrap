@@ -6,17 +6,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.openstrap.app.BuildConfig
+import org.openstrap.app.data.settings.BackupState
 import org.openstrap.app.data.settings.Goals
 import org.openstrap.app.data.settings.HealthConnectAuto
 import org.openstrap.app.data.settings.UserProfile
 import org.openstrap.app.ui.dashboard.ScreenList
 import org.openstrap.app.ui.glow.GlowLayout
-import org.openstrap.app.ui.glow.GlowSwitch
 import org.openstrap.app.ui.glow.GlowType
 import org.openstrap.app.ui.glow.PageHeader
 import org.openstrap.app.ui.glow.PageRow
@@ -54,6 +55,22 @@ fun healthConnectLine(auto: HealthConnectAuto, now: Long, zone: java.time.ZoneId
     }
 }
 
+/** The You page's Health Connect row: on and when it last wrote, off, or stopped and why, in a few words. */
+fun healthConnectSummary(auto: HealthConnectAuto, now: Long, zone: java.time.ZoneId, locale: java.util.Locale = java.util.Locale.getDefault()): String =
+    when {
+        auto.on && auto.lastSynced != null -> healthConnectLine(auto, now, zone, locale)
+        auto.on -> "On"
+        auto.stopped == HealthConnectAuto.Stopped.PERMISSIONS -> "Stopped. Permissions were turned off"
+        auto.stopped == HealthConnectAuto.Stopped.UNAVAILABLE -> "Stopped. Not available on this phone"
+        else -> "Off"
+    }
+
+/** A small heading over a panel of rows, so two panels never sit back to back. */
+@Composable
+internal fun PanelHeading(text: String) {
+    Text(text, color = Color.White.copy(alpha = 0.6f), style = GlowType.secondary, modifier = Modifier.padding(start = 18.dp, top = 4.dp))
+}
+
 /**
  * The You page (spec 3.4), from the avatar on any tab: who you are and what happens to your data, things visited
  * monthly. A page like the Strap page rather than a sheet, because most rows open pages of their own and Back from
@@ -69,20 +86,17 @@ fun YouPage(
     contentPadding: PaddingValues,
     onProfile: () -> Unit,
     onGoals: () -> Unit,
-    onSaveCopy: () -> Unit,
-    onRestoreCopy: () -> Unit,
-    onHealthConnect: () -> Unit,
-    onRestoreHealthConnect: () -> Unit,
-    /** Auto sync to Health Connect, and its switch (on asks for the permissions first). */
+    /** Auto sync to Health Connect, said on its row; the row opens the Health Connect page. */
     healthConnectAuto: HealthConnectAuto,
-    onAutoHealthConnect: (Boolean) -> Unit,
+    onHealthConnect: () -> Unit,
+    /** Automatic backup, said on its row; the row opens the Backup page. */
+    backup: BackupState,
+    onBackup: () -> Unit,
     onDiagnostics: () -> Unit,
     onSampleData: (() -> Unit)?,
     onBack: () -> Unit,
     /** The row whose page is open beside the list on a wide screen, by its title ("Profile"), or null. */
     selected: String? = null,
-    /** Automatic backup's rows ([AutoBackupRows]), under Your data. */
-    autoBackup: (@Composable () -> Unit)? = null,
 ) {
     BackHandler(onBack = onBack)
     ScreenList(contentPadding, gutter = GlowLayout.Gutter) {
@@ -94,23 +108,20 @@ fun YouPage(
                 PageRow("Sleep goal", sleepGoalLine(goals, sleepNeedMinutes), onClick = onGoals, below = true, icon = AppIcons.Moon)
             }
         }
-        item { Text("Your data", color = Color.White.copy(alpha = 0.6f), style = GlowType.secondary, modifier = Modifier.padding(start = 18.dp, top = 4.dp)) }
+        item { PanelHeading("Your data") }
         item {
             PageRows {
-                PageRow("Save a copy", "A zip of every synced record, saved where you choose", onClick = onSaveCopy, below = true, divider = false, icon = AppIcons.DownloadSimple)
-                PageRow("Restore from a copy", "For days before the strap's history", onClick = onRestoreCopy, below = true, icon = AppIcons.UploadSimple)
-                val autoLine = healthConnectLine(healthConnectAuto, System.currentTimeMillis() / 1000, java.time.ZoneId.systemDefault())
-                PageRow("Auto sync to Health Connect", autoLine, onClick = { onAutoHealthConnect(!healthConnectAuto.on) }, below = true, icon = AppIcons.Refresh04) {
-                    GlowSwitch(healthConnectAuto.on, onAutoHealthConnect)
-                }
-                PageRow("Copy to Health Connect now", "The last 30 days, to Android Health Connect", onClick = onHealthConnect, below = true, icon = AppIcons.Heartbeat)
-                PageRow("Restore from Health Connect", "Bring back what OpenStrap saved there", onClick = onRestoreHealthConnect, below = true, icon = AppIcons.ArrowCounterClockwise)
+                // Read again whenever either changes, so "today" and "yesterday" follow the last one.
+                val now = remember(healthConnectAuto, backup) { System.currentTimeMillis() / 1000 }
+                val zone = java.time.ZoneId.systemDefault()
+                PageRow(
+                    "Health Connect", healthConnectSummary(healthConnectAuto, now, zone), onClick = onHealthConnect, below = true, divider = false,
+                    icon = AppIcons.Heartbeat, selected = selected == "Health Connect",
+                )
+                PageRow("Backup", BackupCopy.summary(backup, now, zone), onClick = onBackup, below = true, icon = AppIcons.ShieldCheck, selected = selected == "Backup")
             }
         }
-        if (autoBackup != null) {
-            item { Text("Backup", color = Color.White.copy(alpha = 0.6f), style = GlowType.secondary, modifier = Modifier.padding(start = 18.dp, top = 4.dp)) }
-            item { autoBackup() }
-        }
+        item { PanelHeading("Help") }
         item {
             PageRows {
                 PageRow("Diagnostics", "$logLines lines, for bug reports", onClick = onDiagnostics, below = true, divider = false, icon = AppIcons.Bug, selected = selected == "Diagnostics")

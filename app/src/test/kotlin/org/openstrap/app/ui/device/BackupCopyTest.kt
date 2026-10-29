@@ -27,6 +27,14 @@ class BackupCopyTest {
         )
     }
 
+    @Test fun `the You page's row says it in a few words`() {
+        fun summary(s: BackupState) = BackupCopy.summary(s, now, utc, Locale.UK)
+        assertEquals("Off", summary(BackupState(null, null, null, null, null)))
+        assertEquals("On. No backup yet", summary(on))
+        assertEquals("Last backup today at 03:12", summary(on.copy(lastDone = 1792195200L + 3 * 3600 + 12 * 60)))
+        assertEquals("Last backup failed", summary(on.copy(lastDone = 1792195200L, failed = BackupFiles.Failure.NoSpace, failedAt = now)))
+    }
+
     @Test fun `every failure and outcome has its words`() {
         for (f in BackupFiles.Failure.entries) BackupCopy.failure(f)
         assertEquals("Backed up as OpenStrap-backup-2026-10-17.zip.", BackupCopy.outcome(AutoBackup.Outcome.Done("OpenStrap-backup-2026-10-17.zip")))

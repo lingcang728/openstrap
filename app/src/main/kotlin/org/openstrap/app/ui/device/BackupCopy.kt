@@ -8,13 +8,21 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** The words of automatic backup on the You page and in its messages. */
+/** The words of backup on the You and Backup pages and in its messages. */
 object BackupCopy {
     /** The Automatic backup row's value: off, waiting for the first one, the last one, or why the last one failed. */
     fun status(state: BackupState, now: Long, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String {
         if (!state.on) return "Off. A zip each day in a folder you choose"
         state.failed?.let { return "Last backup failed. ${failure(it)}" }
         val done = state.lastDone ?: return "Each day while the phone charges. No backup yet"
+        return "Last backup ${whenDone(done, now, zone, locale)}"
+    }
+
+    /** The You page's Backup row: off, waiting for the first one, the last one, or that it failed (the page says why). */
+    fun summary(state: BackupState, now: Long, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String {
+        if (!state.on) return "Off"
+        if (state.failed != null) return "Last backup failed"
+        val done = state.lastDone ?: return "On. No backup yet"
         return "Last backup ${whenDone(done, now, zone, locale)}"
     }
 

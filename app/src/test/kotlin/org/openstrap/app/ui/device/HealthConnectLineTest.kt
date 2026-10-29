@@ -35,4 +35,13 @@ class HealthConnectLineTest {
         )
         assertEquals("Stopped. Health Connect isn't available on this phone", line(HealthConnectAuto(stopped = HealthConnectAuto.Stopped.UNAVAILABLE)))
     }
+
+    @Test fun `the You page's row says it in a few words`() {
+        fun summary(auto: HealthConnectAuto) = healthConnectSummary(auto, now, zone, Locale.UK)
+        assertEquals("Off", summary(HealthConnectAuto()))
+        assertEquals("On", summary(HealthConnectAuto(on = true)))
+        assertEquals("On. Last synced 10:42", summary(HealthConnectAuto(on = true, lastSynced = at(29, 10, 42))))
+        assertEquals("Stopped. Permissions were turned off", summary(HealthConnectAuto(stopped = HealthConnectAuto.Stopped.PERMISSIONS)))
+        assertEquals("Stopped. Not available on this phone", summary(HealthConnectAuto(stopped = HealthConnectAuto.Stopped.UNAVAILABLE)))
+    }
 }
