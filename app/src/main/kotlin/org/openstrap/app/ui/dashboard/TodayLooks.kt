@@ -29,9 +29,13 @@ private fun heroHue(moment: Moment?): Hue = when (moment) {
  * The look [slot] has on its own (spec 2.4): the edge follows what the card is about, and a Small or Tall is a shape
  * of its own. Heart rate is lit from the right only while the reading is [live]. Your week is a neutral edge from the
  * bottom: a summary of steps, sleep and workouts at their usual, in no one metric's colour. After a workout Load is a
- * Small toward your usual (from below) and Time to recover the Small beside it.
+ * Small toward your usual (from below) and Time to recover the Small beside it. Last night, Your week and Start a
+ * workout are unlit, like a list: light is kept for cards where it says something (Steps toward the goal, heart rate
+ * live), so it still points at them. An unlit strip reads apart from an unlit card ([Shape.Strip]).
  */
-fun defaultLook(slot: TodaySlot, moment: Moment?, live: Boolean = false): CardLook = ownLook(slot, moment, live).copy(shape = Shape.of(slot.size))
+fun defaultLook(slot: TodaySlot, moment: Moment?, live: Boolean = false): CardLook = ownLook(slot, moment, live).let { l ->
+    l.copy(shape = if (l.tier == Tier.List && slot.size == CardSize.Strip) Shape.Strip else Shape.of(slot.size))
+}
 
 private fun ownLook(slot: TodaySlot, moment: Moment?, live: Boolean): CardLook = when (slot.card) {
     TodayCard.Hero -> glow(heroHue(moment))
@@ -43,7 +47,7 @@ private fun ownLook(slot: TodaySlot, moment: Moment?, live: Boolean): CardLook =
     TodayCard.BodyMorning, TodayCard.RightNow -> ListLook
     TodayCard.LoadToday -> if (slot.size == CardSize.Small) edge(Hue.Load, Edge.Bottom) else ListLook
     TodayCard.Recover -> edge(Hue.Load, Edge.Bottom)
-    TodayCard.LastNight -> if (slot.size == CardSize.Strip) strip(Hue.Sleep, Edge.Top) else edge(Hue.Sleep, Edge.Top)
+    TodayCard.LastNight -> ListLook
     TodayCard.HeartRate -> edge(Hue.Heart, if (live) Edge.Right else Edge.Bottom)
     TodayCard.Activity -> edge(Hue.Steps, Edge.Bottom)
     TodayCard.Recovery -> edge(Hue.Recovery, Edge.Left)
@@ -51,9 +55,9 @@ private fun ownLook(slot: TodaySlot, moment: Moment?, live: Boolean): CardLook =
     // so it doesn't read as the hero's glow above it. The level edge card is only its step down ([options]).
     TodayCard.Charge -> if (slot.secondGlow) CardLook(Tier.Glow, Hue.Charge, Edge.Left) else CardLook(Tier.Level, Hue.Charge, Edge.Left)
     TodayCard.Workout -> edge(Hue.Heart, Edge.Left)
-    TodayCard.Week -> edge(Hue.Neutral, Edge.Bottom)
+    TodayCard.Week -> ListLook
     TodayCard.HabitAge -> edge(Hue.HabitAge, Edge.Left)
-    TodayCard.StartWorkout -> strip(Hue.Heart, Edge.Bottom)
+    TodayCard.StartWorkout -> ListLook
     TodayCard.EditToday -> CardLook(Tier.Plain, Hue.Neutral)
 }
 

@@ -42,8 +42,12 @@ import org.openstrap.app.ui.dashboard.items
  * The edge card override that draws [this] look: the side it fixes, and the neutral light for a neutral card. Glow
  * cards and lists get none, so a list stays a list.
  */
-internal fun CardLook.edgeOverride(): EdgeOverride =
-    if (tier == Tier.Edge || tier == Tier.Strip) EdgeOverride(edge = edge, color = EdgeNeutral.takeIf { hue == Hue.Neutral }) else EdgeOverride()
+internal fun CardLook.edgeOverride(): EdgeOverride = when (tier) {
+    Tier.Edge, Tier.Strip -> EdgeOverride(edge = edge, color = EdgeNeutral.takeIf { hue == Hue.Neutral })
+    // An unlit card drawn as an edge card (Activity's Start a workout, Plain) has no light; a list ignores it.
+    Tier.List, Tier.Plain -> EdgeOverride(plain = true)
+    else -> EdgeOverride()
+}
 
 /**
  * Adds a tab's [slots] to a dashboard as grid rows ([packGrid]), each row in its first card's pane ([tabPanes]), every card drawn

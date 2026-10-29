@@ -113,9 +113,9 @@ private fun dateOf(epoch: Long) = java.time.Instant.ofEpochSecond(epoch).atZone(
  * something and (i) at the right of the title row (spec 5.4), "Updated Sun 18 Oct" under it, the age in dots, one
  * status line against last week (the range until there's a last week, orchid only when the number moved) and the age
  * scale. The method, the pace of aging and what moves it are in its info sheet, behind the (i). Before the first
- * estimate it says when that is, with no number; with no birth year or sex it says what's needed and opens the profile
- * ([onOpenProfile]) instead of the Habit Age page ([onClick], null on the page itself). Nothing shows until it has been
- * worked out.
+ * estimate your own age from your birth year stands in, "Your age for now" and when the first estimate comes under it;
+ * without a birth year it says so, with no number. With no birth year or sex it opens the profile ([onOpenProfile])
+ * instead of the Habit Age page ([onClick], null on the page itself). Nothing shows until it has been worked out.
  */
 @Composable
 fun HabitAgeEdgeCard(state: Healthspan.Outcome?, onClick: (() -> Unit)?, onOpenProfile: (() -> Unit)?, modifier: Modifier = Modifier) {
@@ -125,8 +125,8 @@ fun HabitAgeEdgeCard(state: Healthspan.Outcome?, onClick: (() -> Unit)?, onOpenP
     val needsProfile = r == null && state.missing.isNotEmpty() && withheld?.profile == true
     var info by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
     EdgeCard(
-        // Without an estimate it's one line, so it's only as high as that line.
-        Orchid, modifier.fillMaxWidth().let { if (r != null) it.gridSize(CardSize.Wide) else it }, kind = EdgeKind.Earlier,
+        // Without a number it's one line, so it's only as high as that line.
+        Orchid, modifier.fillMaxWidth().let { if (r != null || state.age != null) it.gridSize(CardSize.Wide) else it }, kind = EdgeKind.Earlier,
         onClick = if (needsProfile) onOpenProfile else onClick,
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -139,16 +139,24 @@ fun HabitAgeEdgeCard(state: Healthspan.Outcome?, onClick: (() -> Unit)?, onOpenP
                 style = GlowType.secondary, maxLines = 1,
             )
         }
-        when {
-            r != null -> {
-                val line = org.openstrap.app.ui.dashboard.TabCopy.habitAgeLine(r.estimate, state.lastWeek, r.low, r.high)
-                EdgeValue(r.estimate.roundToInt().toString(), "years", line.text, if (line.moved) Orchid else Color.White.copy(alpha = GlowType.SECONDARY_ALPHA))
-                Spacer(Modifier.height(10.dp))
-                AgeScale(r.age, r.low, r.high, r.estimate)
-            }
-            needsProfile -> EdgeValue(null, null, profileReminder(state.missing), waiting = false)
-            state.firstEstimate != null -> EdgeValue(null, null, org.openstrap.app.ui.dashboard.TabCopy.firstEstimate(dateOf(state.firstEstimate)), waiting = false)
-            else -> EdgeValue(null, null, withheld?.reason, waiting = false)
+        val line = r?.let { org.openstrap.app.ui.dashboard.TabCopy.habitAgeLine(it.estimate, state.lastWeek, it.low, it.high) }
+        val waiting = when {
+            r != null -> null
+            needsProfile -> profileReminder(state.missing)
+            state.firstEstimate != null -> org.openstrap.app.ui.dashboard.TabCopy.firstEstimate(dateOf(state.firstEstimate))
+            else -> withheld?.reason
+        }
+        // The estimate once there is one; until then your own age stands in. Without a birth year, no number.
+        val shown = r?.estimate?.roundToInt() ?: state.age
+        EdgeValue(
+            shown?.toString(), shown?.let { "years" },
+            line?.text ?: if (shown != null) org.openstrap.app.ui.dashboard.TabCopy.habitAgeForNow(waiting) else waiting,
+            if (line?.moved == true) Orchid else Color.White.copy(alpha = GlowType.SECONDARY_ALPHA),
+            waiting = shown != null,
+        )
+        if (r != null) {
+            Spacer(Modifier.height(10.dp))
+            AgeScale(r.age, r.low, r.high, r.estimate)
         }
     }
     if (info) {

@@ -107,21 +107,23 @@ enum class ActivityCard { Start, Steps, ActiveMinutes, HeartPoints, Load, HeartR
 data class ActivityFacts(val isToday: Boolean = true, val suggestion: Boolean = false, val live: Boolean = false)
 
 /**
- * Activity (spec 5.3): a Wide edge card to start a sport (today only, the neutral light from below), steps glowing,
+ * Activity (spec 5.3): a Wide card to start a sport (today only, unlit with a light moving round its border), steps glowing,
  * active minutes (from below) and Heart points (from above) as a Small pair, Load filling across toward your usual,
- * the day's heart rate (from the right while live, else from below like any usual value), the day's facts as a list.
- * The workouts list comes right after another list, so it sits on an edge card in the neutral light, from the top.
+ * the day's facts as a list, the day's heart rate (from the right while live, else from below like any usual value),
+ * then the workouts list, unlit like the facts. Heart rate sits between the two lists, so they never touch and
+ * neither needs a light that says nothing.
  *
- * Wide: the Start a workout card and steps span both columns; the Small pair and Load on the left, heart rate, the
- * facts and workouts on the right.
+ * Wide: the Start a workout card and steps span both columns; the Small pair and Load on the left, the facts, heart
+ * rate and workouts on the right.
  */
 fun activityCards(facts: ActivityFacts = ActivityFacts()): List<TabSlot<ActivityCard>> = listOfNotNull(
-    TabSlot(ActivityCard.Start, edge(Hue.Neutral, Edge.Bottom), Pane.Full).takeIf { facts.isToday },
+    // Plain, not a list: an unlit card whose border carries the moving light.
+    TabSlot(ActivityCard.Start, CardLook(Tier.Plain, Hue.Heart), Pane.Full).takeIf { facts.isToday },
     TabSlot(ActivityCard.Steps, glow(Hue.Steps), Pane.Full),
     small(ActivityCard.ActiveMinutes, Hue.Steps, Edge.Bottom, Pane.Left),
     small(ActivityCard.HeartPoints, Hue.Heart, Edge.Top, Pane.Left),
     TabSlot(ActivityCard.Load, CardLook(Tier.Level, Hue.Load, Edge.Left), Pane.Left),
-    TabSlot(ActivityCard.HeartRate, edge(Hue.Heart, if (facts.live) Edge.Right else Edge.Bottom), Pane.Right),
     TabSlot(ActivityCard.Facts, ListLook, Pane.Right),
-    TabSlot(ActivityCard.Workouts, edge(Hue.Neutral, Edge.Top), Pane.Right),
+    TabSlot(ActivityCard.HeartRate, edge(Hue.Heart, if (facts.live) Edge.Right else Edge.Bottom), Pane.Right),
+    TabSlot(ActivityCard.Workouts, ListLook, Pane.Right),
 )

@@ -43,6 +43,7 @@ import org.openstrap.app.ui.components.rememberHaptics
 import org.openstrap.app.ui.dashboard.DailyHistory
 import org.openstrap.app.ui.dashboard.DayUiState
 import org.openstrap.app.ui.dashboard.Hue
+import org.openstrap.app.ui.dashboard.Tier
 import org.openstrap.app.ui.dashboard.defaultLook
 import org.openstrap.app.ui.dashboard.lookOr
 import org.openstrap.app.ui.dashboard.todayPanes
@@ -232,6 +233,8 @@ fun GlowTodayScreen(
                             val override = EdgeOverride(
                                 edge = look.edge.takeIf { it != own.edge },
                                 color = EdgeNeutral.takeIf { look.hue == Hue.Neutral && own.hue != Hue.Neutral },
+                                // An unlit card drawn as an edge card (Last night, Your week, Start) skips its light.
+                                plain = look.tier == Tier.List,
                             )
                             CompositionLocalProvider(LocalEdgeOverride provides override) {
                                 Column(m.then(dim)) {
@@ -294,6 +297,9 @@ private class TodayContext(
     /** Today's Recovery is the first real score (E4). */
     val firstScore: Boolean,
 ) {
+    /** The evening and night hero shows the day's steps in dots ([EveningHero]), so the Steps card needn't. */
+    val stepsInHero: Boolean get() = (moment == Moment.Evening || moment == Moment.Night) && !stuck
+
     /** "Up to 09:40" for a card whose [newest] reading is stale while syncing has stopped ([upToMarker]). */
     fun upTo(newest: Long?): String? = upToMarker(newest, now, stopped, isToday, zone, staleAfter)
 
@@ -744,7 +750,11 @@ private fun TodayRow(
             upTo = if (ctx.live == null) ctx.upTo(s.heartRate.lastOrNull()?.x) else null,
         )
         // Steps come in the same records as the rest of the day, so the day's newest reading is how far they go.
-        TodayCard.Activity -> ActivityCard(s, { onOpenMetric(Metric.Steps) }, usual = usualSteps, upTo = ctx.upTo(ctx.newest), tag = ctx.partial)
+        // In the evening and at night the hero has the day's steps in dots, so the card leads with its sentence.
+        TodayCard.Activity -> ActivityCard(
+            s, { onOpenMetric(Metric.Steps) }, usual = usualSteps, upTo = ctx.upTo(ctx.newest), tag = ctx.partial,
+            count = !ctx.stepsInHero,
+        )
         TodayCard.Recovery -> RecoveryEarlierCard(ctx.recoveryShown, { openScore(org.openstrap.app.ui.dashboard.Score.Recovery) }, failure = ctx.recoveryFailure, onRetry = onRetryRecovery)
         TodayCard.Charge -> {
             val c = ctx.rec?.charge

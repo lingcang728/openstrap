@@ -500,7 +500,7 @@ private fun TileRow(tiles: StartLayout.Tiles, f: WidgetFrame) {
     val context = LocalContext.current
     val opens = tiles.sports.map { openReady(context, it.sportType) } + openSportPicker(context)
     val actions = tiles.sports.map { it.action } + StartWidgetModel.ALL_SPORTS_ACTION
-    val icons = tiles.sports.map { SportIcons.of(it.shownType) } + AppIcons.GridView
+    val icons = tiles.sports.map { SportIcons.of(it.shownType) } + AppIcons.MoreHorizontalCircle01
     val captions = tiles.captions
     val n = captions.size
     val icon = (tiles.tile * StartLayout.ICON_DP / StartLayout.SMALL_TILE_DP).coerceIn(16f, 24f)

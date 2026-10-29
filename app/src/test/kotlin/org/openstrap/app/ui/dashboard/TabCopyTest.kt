@@ -236,9 +236,14 @@ class TabCopyTest {
 
     @Test fun `workout copy never uses the banned punctuation`() {
         val lines = listOf(
-            TabCopy.FOUND_BY_STRAP, TabCopy.workoutFact(TabCopy.SportFact.Run, 5200f, false, 1685, null, 152)!!,
+            TabCopy.AUTO_DETECTED, TabCopy.workoutFact(TabCopy.SportFact.Run, 5200f, false, 1685, null, 152)!!,
             TabCopy.workoutLine("14 sets", "07:10"), TabCopy.workoutDay(java.time.LocalDate.of(2026, 10, 21), java.time.LocalDate.of(2026, 10, 23)),
         )
         lines.forEach { l -> listOf("·", ";", "—").forEach { assertFalse("$l has $it", l.contains(it)) } }
+    }
+
+    @Test fun `before Habit Age is learned your age stands in`() {
+        assertEquals("Your age for now", TabCopy.habitAgeForNow(null))
+        assertEquals("Your age for now. First estimate Sunday 1 Nov", TabCopy.habitAgeForNow("First estimate Sunday 1 Nov"))
     }
 }

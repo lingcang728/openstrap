@@ -120,7 +120,7 @@ fun PullToSync(
     }
 }
 
-/** The gap a pull opens in the header: a strap icon that turns as you pull and spins while syncing. */
+/** The gap a pull opens in the header: the sync arrows, turning as you pull and spinning while syncing. */
 @Composable
 fun PullSyncReveal() {
     val pull = LocalPullSync.current ?: return
@@ -142,7 +142,7 @@ fun PullSyncReveal() {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                AppIcons.Watch, null,
+                AppIcons.Refresh04, null,
                 Modifier.size(18.dp).graphicsLayer { rotationZ = if (syncing) turn else pull.fraction() * 180f },
                 tint = if (ready || syncing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )

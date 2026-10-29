@@ -105,7 +105,7 @@ reads as the same light:
 - **Energy is one colour.** Ember orange on every surface. Its level shows as the light's height, never as a hue, so
   `chargeScale`, `chargeAt` and `chargeDeep` go. The old gold `charge` #FFD166 becomes #F66C28.
 - **Recovery is one teal.** `readinessDeep` goes, and so does the band hue (teal, amber, coral): the word says the band.
-- **Neutral light** for cards that speak for no one metric (Your week, Workouts, strips): hsl 220 10% 55%.
+- **Neutral light** for cards that speak for no one metric (strips): hsl 220 10% 55%. Your week and Workouts are unlit.
 - **Green and amber** (`good`, `warn`) are for the strap and sync only, never a health value. `bad` goes.
 
 Surfaces and greys:
@@ -248,6 +248,16 @@ flips its edge first. If that still clashes it takes another tier the spec gives
 a neutral edge card, the second glow as its level edge card) or the neutral light. Only then does a card move, and only one
 whose place is open: a pin, Your week or Habit Age, to the nearest place it fits, never splitting a Small pair.
 `varyLooks` applies this to Today after Edit Today's pins and hides.
+
+**Light means something on Today.** Light is kept for cards where it says something: the hero and the second glow,
+Steps (its line toward the goal) and Heart rate (live). Last night, Your week and Start a workout are unlit, a dark
+panel with a hairline like a list (`EdgeOverride.plain`). An unlit strip and an unlit card read apart by height
+(`Shape.Strip`), so they may follow each other.
+
+**The moving border.** Start a workout, on Today and on Activity, is the one action the screens offer, so it has the
+one moving light: a heart-red light travelling round its border once every 7 s, brightest at its head and fading
+along its tail, with a soft halo (`movingBorder`). It holds still while the list scrolls or the page is off screen,
+as the glows do, and rests at the top with the system's animations off.
 
 #### Glow card
 
@@ -513,6 +523,11 @@ Rows with values: Alarms, Phone alerts, Health alerts, Off-body reminder, Auto-d
 Stay connected in background, Firmware, Zepp account (moved out of Firmware). Then Restart and Forget. Alarms,
 Firmware and Profile pages move to the same edge and list styling (no Material panels).
 
+**Health alerts**: one row per setting with its value on the right and a down caret (`PageMenuRow`). A tap opens a
+menu at the row with every value the strap offers and a tick on the chosen one, in place of a row of chips per
+setting. An Off value is dimmer. The measuring row says "Heart rate alerts need Continuous or every minute." under it
+only when the chosen measuring turns the heart rate alerts off.
+
 **Every page over a tab** (You, Strap, details, Habit Age, All workouts, Alarms, Phone alerts, Health alerts,
 Firmware, Profile, Goals, Diagnostics): a 44 dp round back button on the Control surface, the page title in Page title
 type (2.3), then cards in the tiers of 2.5. Material list items, cards, outlined text fields and dividers are replaced
@@ -589,7 +604,7 @@ Rows in order. Sizes per 2.4, tiers per 2.5.
 | Midday | Energy: sentence, value with `lightLevel`, recharged and drained | Strip: Last night collapsed. Edge: Steps (ghost line), Heart rate. List "Right now" (stress, HRV). Edge: Recovery (left edge) |
 | Workout window | "Ready for effort. You usually run around now." Start button, Other sport | Second glow: Energy (wide), a level glow, the light filling across from the left to the value (Recovery's battery on its side). List "Before you start" (Load today, time to recover). Edge: Steps. Strip: Last night |
 | After a workout | "Since your run, 40 min. Heart rate settling." Drop curve into your resting range (a dim band), calm glow | Edge: the workout (left, with its zone bar). Small pair: Load (from below, its bar filling toward your usual day's Load) and To recover (flips to the top). Second glow: Energy, as in the workout window, with its line so far. Edge: Steps |
-| Evening | "A full day. A run, past your step goal and a Load above your usual." The steps said against the goal, since the count is in dots under it. Load only in the sentence and Energy only on its card right under the hero; with that card hidden in Edit Today, "Energy 31 left" as the last line. "Bedtime in 1 h 10". Dim mood | Second glow: Energy, as in the workout window. Edge: Steps (line so far), Heart rate (the day's line, flips to the top under Steps unless live). Strip: Last night |
+| Evening | "A full day. A run, past your step goal and a Load above your usual." The steps said against the goal, since the count is in dots under it. Load only in the sentence and Energy only on its card right under the hero; with that card hidden in Edit Today, "Energy 31 left" as the last line. "Bedtime in 1 h 10". Dim mood | Second glow: Energy, as in the workout window. Edge: Steps (the line so far, led by its sentence, since the hero has the count in dots), Heart rate (the day's line, flips to the top under Steps unless live). Strip: Last night, unlit |
 | Night | As evening, Night mood | As evening |
 | During a workout | The workout, live heart rate | As midday without Heart rate (the hero has it) |
 
@@ -618,10 +633,10 @@ Present in every moment when they apply:
 
 - Workout offer and suggestion (strip), from today only.
 - Health alerts from the strap (strip, "From your strap"), opening the metric.
-- "Start a workout" (strip, heart light from below) above Edit Today, in every moment except during a workout and
+- "Start a workout" (strip, unlit, the moving border) above Edit Today, in every moment except during a workout and
   the workout window, whose hero has Start. The title, your usual sport under it ("Outdoor run, your usual") and a
   44 dp white play button. Tapping opens Ready with that sport.
-- "Your week" (wide edge card, neutral light from the bottom) Monday through Sunday, opening the week story. Steps a
+- "Your week" (wide card, unlit) Monday through Sunday, opening the week story. Steps a
   day in dots, the other two figures as text (2.3).
 - Habit Age (edge, left, the same card as on Recovery) only when there's a new estimate: from the Sunday it updates
   until it has been opened or the Monday ends. Pinned in Edit Today it shows every day. Never before the first
@@ -702,7 +717,7 @@ each nap's heart rate (the naps in the Sleep detail, step 6).
 
 ### 5.3 Activity tab
 
-1. Wide edge card "Start a workout", neutral light from below. Today only. Your three most used sports as 64 dp
+1. Wide card "Start a workout", unlit, with the moving border. Today only. Your three most used sports as 64 dp
    tiles with their names under them, then All sports. Outdoor sports carry a small location mark on the tile. A tile
    opens Ready with that sport (6.3).
 2. Level glow: Steps, drawn like the Energy battery (2.1 Levels, the page's level card): the light rises from
@@ -717,13 +732,13 @@ each nap's heart rate (the naps in the Sleep detail, step 6).
 4. Level: Load, its light filling across toward your usual, "12 today", "Your usual is 40", balance word ("Building",
    "Steady", "Easing off") from the last 7 days against the last 6 weeks, with Today's 25% band for usual. No bar.
    The ghost line of your usual Load by now waits for Load by the hour (step 6). Strain lives in its detail.
-5. Edge: Heart rate, the day's line with your resting range as a dim band, hold to scrub (the number follows). Lit
-   from the right while live, otherwise from below like any usual value.
-6. List "Today", "So far": VO2 max, time to recover, energy, distance.
-7. Edge, neutral light from the top: "Workouts", the day's and the latest before it (5 in all), under small dim day
+5. List "Today", "So far": VO2 max, time to recover, energy, distance.
+6. Edge: Heart rate, the day's line with your resting range as a dim band, hold to scrub (the number follows). Lit
+   from the right while live, otherwise from below like any usual value. It sits between the two lists, so they
+   never touch.
+7. List, unlit: "Workouts", the day's and the latest before it (5 in all), under small dim day
    headers ("Today", "Yesterday", "Wed 21 Oct") instead of a date on each row, a pending suggestion as a row with
-   Save, "Add a workout you didn't record", "All workouts" always. A list right after another list, so it sits on
-   the edge card 2.5 allows. Each row (version A of the workout mocks):
+   Save, "Add a workout you didn't record", "All workouts" always. Each row (version A of the workout mocks):
    - **Effort light:** the sport's toned white icon on a small dark tile (38 dp, 12 dp corners) with a soft
      heart-red glow behind it, as strong as the workout's Load (its EPOC, the strap's or OpenStrap's) against your
      usual workout's: the median of the last 20 with one, a usual one at half, twice it at full. Under 3 workouts
@@ -732,13 +747,13 @@ each nap's heart rate (the naps in the Sleep detail, step 6).
      distance for walks, sets for strength ("14 sets, 07:10"), average heart rate otherwise ("Average 128 bpm,
      09:04"). Each falls back to the next the workout has. Distance (GPS or "≈" from steps, no pace from steps)
      and sets come from phone workouts only. The strap's workouts carry neither, so theirs say heart rate.
-   - **Found by the strap:** a quiet outlined tag beside the name of a workout the strap detected or filed as
+   - **Auto-detected:** a quiet outlined tag beside the name of a workout the strap detected or filed as
      "Activity".
-   - The duration in dots on the right and the thin zone bar under the row, lined up with the name.
+   - The duration as a plain row value on the right and the thin zone bar under the row, lined up with the name.
    - A personal best would be one warm line after the fact. The app doesn't detect them yet.
    All workouts uses the same row inside its day panels.
 
-Wide: the strip and Steps span both columns. The Small pair and Load on the left, Heart rate, the list and Workouts on
+Wide: the strip and Steps span both columns. The Small pair and Load on the left, the list, Heart rate and Workouts on
 the right.
 
 Gone from the screen: the offer card (Today only), active hours, the step counter mismatch note and every method
@@ -766,7 +781,8 @@ The method, the pace of aging and what moves it live in its info sheet.
   the number moved.
 - **Last week:** each Sunday's estimate is stored as shown (`habit_age_week`, database version 18) when it's worked
   out, and the next week compares with the latest one from the 8 days before.
-- **Before the first estimate:** "First estimate Sunday 22 Nov" and no number. Never on Today.
+- **Before the first estimate:** your own age from your birth year in its place, "Your age for now. First estimate
+  Sunday 22 Nov" under it (or what the profile still needs). No number without a birth year. Never on Today.
 - **No birth year or sex:** says what's needed and opens the profile.
 - **Where:** always at the bottom of Recovery. On Today only while new (4.2), or pinned.
 

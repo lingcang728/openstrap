@@ -1,6 +1,8 @@
 package org.openstrap.app.ui.glow
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -95,10 +97,11 @@ val EdgeNeutral = Color.hsl(220f, 0.10f, 0.55f)
 
 /**
  * A screen's say over the next edge card's look, so two cards in a row never look the same (spec 2.4): the [edge] the
- * light comes in from and the [color] it's lit in, each null to keep the card's own.
+ * light comes in from and the [color] it's lit in, each null to keep the card's own. [plain] draws the card unlit, a
+ * dark panel with a hairline like a list's, for a card whose light would say nothing.
  */
 @Immutable
-data class EdgeOverride(val edge: Edge? = null, val color: Color? = null)
+data class EdgeOverride(val edge: Edge? = null, val color: Color? = null, val plain: Boolean = false)
 
 val LocalEdgeOverride = staticCompositionLocalOf { EdgeOverride() }
 
@@ -133,11 +136,14 @@ fun EdgeCard(
         modifier
             .then(opening?.modifier ?: Modifier)
             .let { if (onClick != null) it.pressClickable(opening?.onClick ?: onClick, EdgeShape) else it }
-            .drawWithCache {
-                // The shared edge light ([edgePaint]), as a widget's background draws it.
-                val paint = edgePaint(light, tint, level, mood, size.width, size.height, density)
-                val glow = paint.glow.brush()
-                onDrawBehind { drawEdge(paint, glow) }
+            .let {
+                if (override.plain) it.clip(EdgeShape).background(ListSurface, EdgeShape).border(1.dp, RowHairline, EdgeShape)
+                else it.drawWithCache {
+                    // The shared edge light ([edgePaint]), as a widget's background draws it.
+                    val paint = edgePaint(light, tint, level, mood, size.width, size.height, density)
+                    val glow = paint.glow.brush()
+                    onDrawBehind { drawEdge(paint, glow) }
+                }
             }
             .padding(contentPadding),
     ) {

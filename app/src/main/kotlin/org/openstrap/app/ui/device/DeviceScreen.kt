@@ -198,7 +198,7 @@ fun DeviceScreen(
                     is ConnectionState.Connected -> {
                         PageButton(
                             "Sync now", vm.strap::syncNow, Modifier.weight(1f).height(56.dp), enabled = sync !is SyncState.Running,
-                            icon = AppIcons.ArrowsClockwise,
+                            icon = AppIcons.Refresh04,
                         )
                         if (info?.findDevice == true) FindStrapButton(vm, Modifier.weight(1f).height(56.dp))
                     }
@@ -235,7 +235,7 @@ fun DeviceScreen(
                     first = false
                 }
                 if (connection is ConnectionState.Connected && info?.canRestart == true) {
-                    PageRow("Restart strap", onClick = { confirmRestart = true }, divider = !first, icon = AppIcons.ArrowClockwise)
+                    PageRow("Restart strap", onClick = { confirmRestart = true }, divider = !first, icon = AppIcons.ShutDown)
                     first = false
                 }
                 PageRow("Forget this strap", onClick = { confirmForget = true }, divider = !first, titleColor = DestructiveInk, icon = AppIcons.Trash)
@@ -250,7 +250,7 @@ private fun FindStrapButton(vm: DeviceViewModel, modifier: Modifier) {
     val finding by vm.strap.findingStrap.collectAsState()
     PageButton(
         if (finding) "Stop buzzing" else "Find strap", { if (finding) vm.stopFindingStrap() else vm.findStrap() }, modifier,
-        icon = if (finding) AppIcons.StopFill else AppIcons.BellRinging,
+        icon = if (finding) AppIcons.StopFill else AppIcons.SearchArea,
     )
 }
 
@@ -334,38 +334,41 @@ private fun StrapHero(name: String, connection: ConnectionState, sync: SyncState
                     style = GlowType.secondary, modifier = Modifier.padding(top = 4.dp),
                 )
             }
+            // 5 dp under it, so the space below the battery matches the space the title's line height leaves above it.
+            // Clear of the strap on the right too, which sits centred and so lower as this grows.
+            Column(Modifier.fillMaxWidth().padding(top = 128.dp, bottom = 5.dp, end = 112.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // The card's one dotted number (spec 2.3); the word after it sits on the digits' baseline in Body at 72%.
+                if (battery != null) Row(verticalAlignment = Alignment.Bottom) {
+                    DotMatrixText("$battery", dot = org.openstrap.app.ui.glow.DotSize.Hero)
+                    Text("% battery", color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.body, modifier = Modifier.padding(start = 8.dp))
+                }
+                if (sync is SyncState.Running) {
+                    PageProgress()
+                    Text(sync.step, style = GlowType.secondary, color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA))
+                }
+                when {
+                    connection is ConnectionState.Failed && !connection.keyRejected -> {
+                        Text(connection.reason, color = MetricColors.warn, style = GlowType.secondary)
+                        Text(
+                            "OpenStrap keeps retrying. Keep the strap on its charger near the phone, and make sure the Zepp app " +
+                                "isn't running. The strap talks to one app at a time.",
+                            style = GlowType.secondary, color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA),
+                        )
+                    }
+                    sync is SyncState.Failed -> {
+                        Text("Sync stopped. ${sync.reason}", color = MetricColors.warn, style = GlowType.secondary)
+                        Text(
+                            "$DATA_ON_STRAP OpenStrap tries again by itself.",
+                            style = GlowType.secondary, color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA),
+                        )
+                    }
+                }
+            }
+            // The strap at the card's right, centred top to bottom.
             StrapDrawing(
                 led, lit = connected != null || connection is ConnectionState.Failed, syncing = connected != null && sync is SyncState.Running,
-                Modifier.align(Alignment.TopEnd).size(width = 100.dp, height = 125.dp),
+                Modifier.align(Alignment.CenterEnd).size(width = 100.dp, height = 125.dp),
             )
-        }
-        Column(Modifier.fillMaxWidth().padding(top = 128.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // The card's one dotted number (spec 2.3); the word after it sits on the digits' baseline in Body at 72%.
-            if (battery != null) Row(verticalAlignment = Alignment.Bottom) {
-                DotMatrixText("$battery", dot = org.openstrap.app.ui.glow.DotSize.Hero)
-                Text("% battery", color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.body, modifier = Modifier.padding(start = 8.dp))
-            }
-            if (sync is SyncState.Running) {
-                PageProgress()
-                Text(sync.step, style = GlowType.secondary, color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA))
-            }
-            when {
-                connection is ConnectionState.Failed && !connection.keyRejected -> {
-                    Text(connection.reason, color = MetricColors.warn, style = GlowType.secondary)
-                    Text(
-                        "OpenStrap keeps retrying. Keep the strap on its charger near the phone, and make sure the Zepp app " +
-                            "isn't running. The strap talks to one app at a time.",
-                        style = GlowType.secondary, color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA),
-                    )
-                }
-                sync is SyncState.Failed -> {
-                    Text("Sync stopped. ${sync.reason}", color = MetricColors.warn, style = GlowType.secondary)
-                    Text(
-                        "$DATA_ON_STRAP OpenStrap tries again by itself.",
-                        style = GlowType.secondary, color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA),
-                    )
-                }
-            }
         }
     }
 }

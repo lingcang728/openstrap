@@ -72,9 +72,21 @@ class TodayLooksTest {
             val after = today(Moment.After, TodayFacts(workout = true), wide = wide)
             assertEquals(CardLook(Tier.Edge, Hue.Load, Edge.Bottom, Shape.Small), after.first { it.card == LoadToday }.look)
             assertEquals(CardLook(Tier.Edge, Hue.Load, Edge.Top, Shape.Small), after.first { it.card == TodayCard.Recover }.look)
-            // Activity is lit from below, so Your week under it flips to the top.
-            assertEquals(Edge.Top, after.first { it.card == Week }.look?.edge)
+            // Your week is unlit, so it needs no flip under Activity's light.
+            assertEquals(CardLook(Tier.List, Hue.Neutral), after.first { it.card == Week }.look)
             assertVaried(after, wide, "after wide=$wide")
+        }
+    }
+
+    @Test fun `in the evening only the glows, Steps and heart rate are lit`() {
+        for (wide in listOf(false, true)) {
+            val evening = today(Moment.Evening, TodayFacts(), wide = wide)
+            val unlit = evening.filter { it.look?.tier == Tier.List }.map { it.card }
+            assertEquals(listOf(LastNight, Week, TodayCard.StartWorkout), unlit)
+            // Two unlit strips and an unlit card between them: told apart by their height.
+            assertEquals(Shape.Strip, evening.first { it.card == LastNight }.look?.shape)
+            assertEquals(Shape.Card, evening.first { it.card == Week }.look?.shape)
+            assertVaried(evening, wide, "evening wide=$wide")
         }
     }
 
@@ -131,9 +143,9 @@ class TodayLooksTest {
         val midday = today(Moment.Midday, TodayFacts())
         val rec = midday.first { it.card == Recovery }.look
         val week = midday.first { it.card == Week }.look
-        assertEquals(CardLook(Tier.Edge, Hue.Neutral, Edge.Bottom), week)
+        assertEquals(CardLook(Tier.List, Hue.Neutral), week)
         assertNotEquals(rec?.hue, week?.hue)
-        assertNotEquals(rec?.edge, week?.edge)
+        assertNotEquals(rec?.tier, week?.tier)
     }
 
     @Test fun `a clash flips the later card's edge first`() {
