@@ -1422,7 +1422,7 @@ private fun HoldToEnd(onEnd: () -> Unit) {
 }
 
 private val EndRed = MetricColors.heart
-private const val HOLD_MS = 1000
+private const val HOLD_MS = 2000
 
 /* ------------------------------------- Rest of the app meanwhile ------------------------------------- */
 
