@@ -57,7 +57,7 @@ fun BackupPage(
         item {
             PageRows {
                 PageRow("Save a copy", "A zip of every synced record, saved where you choose", onClick = onSaveCopy, below = true, divider = false, icon = AppIcons.DownloadSimple)
-                PageRow("Restore from a file", "Any OpenStrap zip, for days before the strap's history", onClick = onRestoreFile, below = true, icon = AppIcons.UploadSimple)
+                PageRow("Restore from a file", "Any OpenStrap zip. Fills in what this phone is missing", onClick = onRestoreFile, below = true, icon = AppIcons.UploadSimple)
             }
         }
     }

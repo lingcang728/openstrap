@@ -137,7 +137,7 @@ class DeviceViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     /**
-     * Restores a zip from [exportCsv] or automatic backup into the days before the strap's history, and the settings in
+     * Restores a zip from [exportCsv] or automatic backup into what this phone is missing ([CsvImporter]), and the settings in
      * it that this phone hasn't set. Safe to run twice.
      */
     fun importCsv(uri: Uri) = viewModelScope.launch {

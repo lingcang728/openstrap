@@ -98,7 +98,7 @@ class CsvRestoreTest {
         assertEquals(0, again.total)
     }
 
-    @Test fun `the strap's days stay as it synced them, gaps included, and the backup fills the days before`() = runTest {
+    @Test fun `heart rate the strap re-sent keeps its values, and the backup fills every minute it lacks`() = runTest {
         fillOldPhone()
         // The strap's last week on the new phone: its first day starts at 10:00, and it has every other hour.
         val strapFrom = day - week
@@ -107,10 +107,11 @@ class CsvRestoreTest {
         val result = restore(backup(old))
 
         val hr = phone.healthDao().hr()
-        assertEquals(old.healthDao().hr().filter { it.timestamp < strapFrom }, hr.filter { it.timestamp < strapFrom })
-        assertEquals(strap.map { it.timestamp }, hr.filter { it.timestamp >= strapFrom }.map { it.timestamp })
-        assertTrue(hr.filter { it.timestamp >= strapFrom }.all { it.bpm == 200 })
-        assertEquals(7 * 24, result.present)
+        val strapTimes = strap.mapTo(HashSet()) { it.timestamp }
+        assertEquals(old.healthDao().hr().map { it.timestamp }, hr.map { it.timestamp })
+        assertTrue(hr.filter { it.timestamp in strapTimes }.all { it.bpm == 200 })
+        assertEquals(old.healthDao().hr().filter { it.timestamp !in strapTimes }, hr.filter { it.timestamp !in strapTimes })
+        assertEquals(strap.size, result.present)
     }
 
     @Test fun `a night the strap re-synced with another start isn't doubled, and keeps its own stages`() = runTest {

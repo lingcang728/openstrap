@@ -8,9 +8,10 @@ import java.time.ZoneId
 import java.util.zip.ZipInputStream
 
 /**
- * Restores a zip made by [CsvExporter] into the days before the strap's history. The strap keeps weeks of it and syncs
- * them itself, so for each table the backup only fills the local days before the first day the phone has a row on;
- * that day and every day after it are the strap's, gaps included. A sleep or workout that overlaps one on the phone is
+ * Restores a zip made by [CsvExporter] into what the phone is missing. Heart rate and activity minutes ([MINUTES]) come
+ * back wherever the phone has no row for that minute, and a minute it has keeps the strap's value, so a day the strap
+ * only partly re-sent is filled in. Every other table only fills the local days before the first day the phone has a
+ * row on: that day and every day after it are the strap's, gaps included. A sleep or workout that overlaps one on the phone is
  * skipped too, and stages and workout heart rate come back only with their sleep or workout. A strap workout deleted in
  * OpenStrap, on the phone or by the backup, stays deleted: its row and the sport effect deleted with it are left out, so
  * its heart rate is too. Restoring twice changes nothing. Runs as one transaction, so a zip that fails part way changes
@@ -98,10 +99,19 @@ class CsvImporter(private val db: OpenStrapDatabase, private val zone: ZoneId = 
                     val first = query("SELECT MIN(${key.column}) FROM ${key.table}") { c -> if (c.isNull(0)) null else c.getLong(0) }.single()
                     val cutoff = first?.let { dayStart(it) } ?: Long.MAX_VALUE
                     // A deletion is the user's, not the strap's history: every one comes back, less those already here.
-                    val before = if (key.table in WHOLE) {
-                        val have = query("SELECT ${key.column} FROM ${key.table}") { it.getLong(0) }.toHashSet()
-                        rows.filter { it.first !in have }
-                    } else rows.filter { it.first < cutoff }
+                    val before = when (key.table) {
+                        in WHOLE -> {
+                            val have = query("SELECT ${key.column} FROM ${key.table}") { it.getLong(0) }.toHashSet()
+                            rows.filter { it.first !in have }
+                        }
+                        // One row a minute, keyed by it: a minute the phone has keeps the strap's value, any other
+                        // minute comes back, so a day the strap only partly re-sent is filled in too.
+                        in MINUTES -> {
+                            val have = query("SELECT ${key.column} FROM ${key.table} WHERE ${key.column} BETWEEN ? AND ?", from, to) { it.getLong(0) }.toHashSet()
+                            rows.filter { it.first !in have }
+                        }
+                        else -> rows.filter { it.first < cutoff }
+                    }
                     if (span == null) before else {
                         // A night that starts the evening before the strap's first day can still be one it has.
                         val have = query("SELECT ${key.column}, ${span.column} FROM ${key.table} WHERE ${key.column} <= ? AND ${span.column} >= ?", to, from) {
@@ -128,6 +138,9 @@ class CsvImporter(private val db: OpenStrapDatabase, private val zone: ZoneId = 
 
         /** Tables restored whole rather than only before the phone's first day: what the user did, which the strap can't re-send. */
         private val WHOLE = setOf("workout_deleted")
+
+        /** Minute tables, keyed by the minute: restored wherever the phone has no row for it, not only before its first day. */
+        private val MINUTES = setOf("heart_rate", "activity_minute", "activity_extended")
 
         /** One CSV line into cells: commas separate, double quotes wrap a cell and "" inside is a quote. */
         fun parseLine(line: String): List<String> {
