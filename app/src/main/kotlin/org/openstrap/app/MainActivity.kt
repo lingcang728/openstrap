@@ -83,6 +83,7 @@ import org.openstrap.app.ui.components.Motion
 import org.openstrap.app.ui.components.ListDetail
 import org.openstrap.app.ui.components.SideBySideWidth
 import androidx.compose.foundation.pager.HorizontalPager
+import org.openstrap.app.ui.components.sinkBehind
 import androidx.compose.foundation.pager.rememberPagerState
 import org.openstrap.app.ui.theme.OpenStrapTheme
 import org.openstrap.app.ui.theme.AppIcons
@@ -493,6 +494,8 @@ private fun AppRoot(
     // The first page over the tab grows out of the header button tapped for it, if one was (spec 3.5).
     val growOrigin = remember { org.openstrap.app.ui.components.GrowOrigin() }
     var growFrom by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    // How far that page is open, for the tab behind it to sink as it comes forward.
+    val pageGrow = org.openstrap.app.ui.components.rememberGrowProgress(pages.isNotEmpty())
     val openPage: (Page) -> Unit = { p ->
         val tapped = growOrigin.take()
         if (pages.isEmpty()) growFrom = tapped
@@ -919,7 +922,8 @@ private fun AppRoot(
             // Every tab stays composed, so a swipe never builds a whole dashboard mid-gesture (with only the neighbours
             // kept, crossing halfway built the next one); glows on tabs off screen, or while the pager moves, hold still.
             HorizontalPager(
-                pager, androidx.compose.ui.Modifier.padding(start = if (rail) org.openstrap.app.ui.components.NavRailWidth else 0.dp).hazeSource(navGlass),
+                pager, androidx.compose.ui.Modifier.padding(start = if (rail) org.openstrap.app.ui.components.NavRailWidth else 0.dp)
+                    .sinkBehind(pageGrow).hazeSource(navGlass),
                 userScrollEnabled = !subScreenOpen, key = { it }, beyondViewportPageCount = Tab.entries.size - 1,
             ) { page -> androidx.compose.runtime.CompositionLocalProvider(
                 // Remembered: a new lambda each time would be a new static local, recomposing the whole tab under it.
@@ -1030,6 +1034,7 @@ private fun AppRoot(
             org.openstrap.app.ui.components.GrowFromButton(
                 pages.isNotEmpty(), growFrom,
                 androidx.compose.ui.Modifier.fillMaxSize().padding(start = if (rail) org.openstrap.app.ui.components.NavRailWidth else 0.dp),
+                progress = pageGrow,
             ) { closing -> androidx.compose.foundation.layout.Box(
                 androidx.compose.ui.Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).hazeSource(navGlass, zIndex = 1f),
             ) {

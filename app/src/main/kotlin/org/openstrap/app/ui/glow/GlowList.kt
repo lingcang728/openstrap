@@ -184,7 +184,7 @@ fun ListRow(
         }
         Spacer(Modifier.width(12.dp))
         if (value != null) CompositionLocalProvider(LocalCardNumbers provides opening?.numbers) {
-            DotMatrixText(value, Modifier.cardNumber(value), dot = DotSize.Row, color = accent)
+            Text(value, Modifier.cardNumber(value), color = accent, style = GlowType.rowValue, maxLines = 1)
         }
         else if (dash) WaitingDash()
         if (onClick != null) {

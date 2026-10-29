@@ -26,7 +26,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
-import org.openstrap.app.ui.glow.ChoicePills
 import org.openstrap.app.ui.glow.DestructiveInk
 import org.openstrap.app.ui.glow.GlowLayout
 import org.openstrap.app.ui.glow.GlowType
@@ -37,6 +36,7 @@ import org.openstrap.app.ui.glow.PageConfirm
 import org.openstrap.app.ui.glow.PageSheet
 import org.openstrap.app.ui.glow.PageTextButton
 import org.openstrap.app.ui.glow.PageHeader
+import org.openstrap.app.ui.glow.PageMenuRow
 import org.openstrap.app.ui.glow.PageNote
 import org.openstrap.app.ui.glow.PagePanel
 import org.openstrap.app.ui.dashboard.ScreenList
@@ -197,36 +197,40 @@ private fun AlarmsPanel(
 @Composable
 private fun HeartAlertsPanel(state: AlarmsUiState, vm: AlarmsViewModel) {
     val g = state.health ?: return
+    val alerts = state.alertsAvailable
+    val off: (Int) -> Boolean = { it == 0 }
     PagePanel(title = "Heart rate and blood oxygen") {
-        g[SettingsCodec.KEY_HR_INTERVAL]?.let { s ->
-            ChoiceRow("Heart rate measuring", s.choices.orEmpty(), s.number?.toInt(), state.busy, ::intervalLabel) { vm.setHrInterval(it) }
-        }
-        val alerts = state.alertsAvailable
-        if (!alerts) PageNote("Heart rate alerts need continuous or every-minute measuring.")
-        g[SettingsCodec.KEY_HIGH_HR_ALERT]?.let { s ->
-            ChoiceRow("High heart rate alert", s.choices.orEmpty(), s.number?.toInt(), state.busy || !alerts, { if (it == 0) "Off" else "Above $it" }) {
-                vm.setEnum(SettingsCodec.KEY_HIGH_HR_ALERT, it)
+        // Rows with a menu each, in place of 21 chips; the measuring note only when it turns the heart rate alerts off.
+        Column {
+            var first = true
+            fun divider() = !first.also { first = false }
+            g[SettingsCodec.KEY_HR_INTERVAL]?.let { s ->
+                PageMenuRow(
+                    "Heart rate measuring", s.choices.orEmpty(), s.number?.toInt(), ::intervalLabel, { vm.setHrInterval(it) },
+                    divider = divider(), enabled = !state.busy, quiet = off,
+                    note = if (alerts) null else "Heart rate alerts need Continuous or every minute.",
+                )
             }
-        }
-        g[SettingsCodec.KEY_LOW_HR_ALERT]?.let { s ->
-            ChoiceRow("Low heart rate alert", s.choices.orEmpty(), s.number?.toInt(), state.busy || !alerts, { if (it == 0) "Off" else "Below $it" }) {
-                vm.setEnum(SettingsCodec.KEY_LOW_HR_ALERT, it)
+            g[SettingsCodec.KEY_HIGH_HR_ALERT]?.let { s ->
+                PageMenuRow(
+                    "High heart rate alert", s.choices.orEmpty(), s.number?.toInt(), { if (it == 0) "Off" else "Above $it" },
+                    { vm.setEnum(SettingsCodec.KEY_HIGH_HR_ALERT, it) }, divider = divider(), enabled = !state.busy && alerts, quiet = off,
+                )
             }
-        }
-        g[SettingsCodec.KEY_LOW_SPO2_ALERT]?.let { s ->
-            ChoiceRow("Low blood oxygen alert", s.choices.orEmpty(), s.number?.toInt(), state.busy, { if (it == 0) "Off" else "Below $it%" }) {
-                vm.setEnum(SettingsCodec.KEY_LOW_SPO2_ALERT, it)
+            g[SettingsCodec.KEY_LOW_HR_ALERT]?.let { s ->
+                PageMenuRow(
+                    "Low heart rate alert", s.choices.orEmpty(), s.number?.toInt(), { if (it == 0) "Off" else "Below $it" },
+                    { vm.setEnum(SettingsCodec.KEY_LOW_HR_ALERT, it) }, divider = divider(), enabled = !state.busy && alerts, quiet = off,
+                )
+            }
+            g[SettingsCodec.KEY_LOW_SPO2_ALERT]?.let { s ->
+                PageMenuRow(
+                    "Low blood oxygen alert", s.choices.orEmpty(), s.number?.toInt(), { if (it == 0) "Off" else "Below $it%" },
+                    { vm.setEnum(SettingsCodec.KEY_LOW_SPO2_ALERT, it) }, divider = divider(), enabled = !state.busy, quiet = off,
+                )
             }
         }
         PageNote("The strap vibrates when an alert goes off. OpenStrap isn't a medical device.")
-    }
-}
-
-@Composable
-private fun ChoiceRow(title: String, choices: List<Int>, current: Int?, disabled: Boolean, label: (Int) -> String, onPick: (Int) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, style = GlowType.body, color = Color.White)
-        ChoicePills(choices, current, label, onPick, enabled = !disabled)
     }
 }
 

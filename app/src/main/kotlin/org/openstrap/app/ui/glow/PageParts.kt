@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,11 +14,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -35,6 +40,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
@@ -283,6 +289,73 @@ internal fun RowNameValue(name: String, nameColor: Color, value: String?, modifi
     }
 }
 
+/**
+ * A setting picked from a short list: the [title] and the chosen value on the right, then a down caret. A tap opens a
+ * menu at the row's end with every option and a tick on the chosen one; picking one calls [onPick] and closes it.
+ * [note] is a line under the row (shown only when something needs saying). Takes the place of a row of chips.
+ */
+@Composable
+fun <T> PageMenuRow(
+    title: String,
+    options: List<T>,
+    selected: T?,
+    label: (T) -> String,
+    onPick: (T) -> Unit,
+    divider: Boolean = true,
+    enabled: Boolean = true,
+    note: String? = null,
+    quiet: (T) -> Boolean = { false },
+) {
+    var open by remember { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxWidth()
+            .let { if (divider) it.drawBehind { drawLine(Hairline, Offset(0f, 0f), Offset(size.width, 0f), 1.dp.toPx()) } else it },
+    ) {
+        Box(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.fillMaxWidth()
+                    .clickable(enabled = enabled, onClickLabel = "Change", role = Role.DropdownList) { open = true }
+                    .alpha(if (enabled) 1f else 0.45f)
+                    .padding(vertical = GlowLayout.RowPadding),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val value = selected?.let(label)
+                Text(title, color = Color.White, style = GlowType.body, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                if (value != null) {
+                    Spacer(Modifier.width(RowValueGap))
+                    Text(
+                        value, style = GlowType.secondary, maxLines = 1,
+                        color = if (selected.let(quiet)) Color.White.copy(alpha = 0.4f) else RowValueColor,
+                    )
+                }
+                Spacer(Modifier.width(RowCaretGap))
+                Icon(AppIcons.CaretDown, null, tint = Color.White.copy(alpha = ROW_CARET_ALPHA), modifier = Modifier.size(CaretSize))
+            }
+            Box(Modifier.align(Alignment.BottomEnd)) {
+                DropdownMenu(
+                    expanded = open, onDismissRequest = { open = false },
+                    offset = DpOffset(0.dp, 4.dp), shape = MenuShape, containerColor = MenuSurface,
+                    tonalElevation = 0.dp, shadowElevation = 12.dp, border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+                ) {
+                    options.forEach { o ->
+                        val on = o == selected
+                        DropdownMenuItem(
+                            text = { Text(label(o), style = GlowType.body, color = if (on) Color.White else RowValueColor) },
+                            onClick = { open = false; if (!on) onPick(o) },
+                            trailingIcon = if (on) ({ Icon(AppIcons.Tick02, null, tint = Color.White, modifier = Modifier.size(18.dp)) }) else null,
+                            modifier = Modifier.widthIn(min = 180.dp).semantics { this.selected = on },
+                        )
+                    }
+                }
+            }
+        }
+        if (note != null) Text(note, color = RowValueColor, style = GlowType.secondary, modifier = Modifier.padding(bottom = GlowLayout.RowPadding))
+    }
+}
+
+private val MenuShape = RoundedCornerShape(18.dp)
+private val MenuSurface = Color(0xFF232326)
+
 /** A row with a switch: the [title], an optional [subtitle] under it, and the switch on the right. */
 @Composable
 fun PageSwitchRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit, divider: Boolean = true, enabled: Boolean = true) {
@@ -499,16 +572,4 @@ fun PageChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Mod
 @Composable
 fun PageNote(text: String, color: Color = Color.White.copy(alpha = 0.6f)) {
     Text(text, color = color, style = GlowType.secondary)
-}
-
-/** A short choice between a few values, as [PageChip]s; the chosen one is white. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun <T> ChoicePills(options: List<T>, selected: T?, label: (T) -> String, onPick: (T) -> Unit, enabled: Boolean = true, modifier: Modifier = Modifier) {
-    FlowRow(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        options.forEach { v ->
-            val on = v == selected
-            PageChip(label(v), on, { if (!on) onPick(v) }, enabled = enabled, role = Role.RadioButton)
-        }
-    }
 }

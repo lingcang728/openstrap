@@ -115,6 +115,9 @@ class TodayCopyTest {
         assertEquals("A quiet day. 2,100 steps and a Load below your usual.", TodayCopy.evening(emptyList(), 2_100, 8_000, LoadStatus.Below, Locale.UK))
         assertEquals("A steady day. 2 workouts and 6,000 steps.", TodayCopy.evening(listOf("run", null), 6_000, 8_000, null, Locale.UK))
         assertEquals("A steady day. A workout and 6,000 steps.", TodayCopy.evening(listOf(null), 6_000, 8_000, LoadStatus.SoFar, Locale.UK))
+        // The app's hero says the steps against the goal, since it shows the count in dots.
+        assertEquals("A quiet day. Well short of your step goal and a Load below your usual.", TodayCopy.evening(emptyList(), 2_100, 8_000, LoadStatus.Below, Locale.UK, stepCount = false))
+        assertEquals("A full day. A run, past your step goal and a Load above your usual.", TodayCopy.evening(listOf("run"), 13_860, 8_000, LoadStatus.Above, Locale.UK, stepCount = false))
     }
 
     @Test fun `bedtime counts down and stops once passed`() {
@@ -192,5 +195,13 @@ class TodayCopyTest {
             TodayCopy.recoverShort(3600L * 30, 0, zone).second, TodayCopy.heartAt(false, "07:00"),
         )
         lines.forEach { l -> listOf("·", ";", "—").forEach { assertFalse("$l has $it", l.contains(it)) } }
+    }
+
+    @Test
+    fun `steps against the goal read as words`() {
+        assertEquals("well short of your step goal", TodayCopy.stepsAgainstGoal(3_999, 8_000))
+        assertEquals("short of your step goal", TodayCopy.stepsAgainstGoal(4_000, 8_000))
+        assertEquals("close to your step goal", TodayCopy.stepsAgainstGoal(6_400, 8_000))
+        assertEquals("past your step goal", TodayCopy.stepsAgainstGoal(8_000, 8_000))
     }
 }

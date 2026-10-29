@@ -458,7 +458,7 @@ internal fun StatusButtonView(line: StatusLine, f: WidgetFrame) {
         return
     }
     val (icon, color) = when (status) {
-        is StrapStatus.StaleSync -> AppIcons.ArrowsClockwise to MetricColors.warn
+        is StrapStatus.StaleSync -> AppIcons.Refresh04 to MetricColors.warn
         is StrapStatus.LowBattery -> AppIcons.BatteryLow to MetricColors.warn
         else -> AppIcons.Watch to Color.White
     }

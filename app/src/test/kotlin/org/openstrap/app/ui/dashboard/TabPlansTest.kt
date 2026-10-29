@@ -83,7 +83,7 @@ class TabPlansTest {
         assertEquals(Edge.Left, look(sleep, SleepCard.Naps).edge)
         val act = activityCards()
         assertEquals(CardLook(Tier.Level, Hue.Load, Edge.Left), look(act, ActivityCard.Load))
-        assertEquals(CardLook(Tier.Edge, Hue.Neutral, Edge.Top), look(act, ActivityCard.Workouts))
+        assertEquals(CardLook(Tier.List, Hue.Neutral), look(act, ActivityCard.Workouts))
         assertEquals(Edge.Bottom, look(act, ActivityCard.HeartRate).edge)
         assertEquals(Edge.Right, look(activityCards(ActivityFacts(live = true)), ActivityCard.HeartRate).edge)
     }
@@ -105,7 +105,7 @@ class TabPlansTest {
         assertEquals(CardSize.Small, act[ActivityCard.ActiveMinutes])
         assertEquals(CardSize.Small, act[ActivityCard.HeartPoints])
         assertEquals(
-            listOf(ActivityCard.Load, ActivityCard.HeartRate, ActivityCard.Facts),
+            listOf(ActivityCard.Load, ActivityCard.Facts, ActivityCard.HeartRate),
             activityCards().map { it.card }.dropWhile { it != ActivityCard.Load }.take(3),
         )
     }

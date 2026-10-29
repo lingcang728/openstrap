@@ -199,9 +199,12 @@ object TodayCopy {
 
     /**
      * The evening hero: what kind of day it was, then what made it. [workouts] are the day's workouts as short nouns
-     * (null where none reads well).
+     * (null where none reads well). Without [stepCount] the steps are said against the goal ([stepsAgainstGoal]), for
+     * the app's hero, which shows the count in dots under the sentence; the widget keeps the count.
      */
-    fun evening(workouts: List<String?>, steps: Int, stepGoal: Int, load: LoadStatus?, locale: Locale = Locale.getDefault()): String {
+    fun evening(
+        workouts: List<String?>, steps: Int, stepGoal: Int, load: LoadStatus?, locale: Locale = Locale.getDefault(), stepCount: Boolean = true,
+    ): String {
         val head = when {
             workouts.isNotEmpty() && (steps >= stepGoal || load == LoadStatus.Above) -> "A full day."
             workouts.isEmpty() && steps < stepGoal / 2 -> "A quiet day."
@@ -213,7 +216,7 @@ object TodayCopy {
                 1 -> "a ${workouts[0] ?: "workout"}"
                 else -> "${workouts.size} workouts"
             },
-            "%,d steps".format(locale, steps),
+            if (stepCount || stepGoal <= 0) "%,d steps".format(locale, steps) else stepsAgainstGoal(steps, stepGoal),
             when (load) {
                 LoadStatus.Above -> "a Load above your usual"
                 LoadStatus.Below -> "a Load below your usual"
@@ -223,6 +226,14 @@ object TodayCopy {
         )
         val list = if (parts.size == 1) parts[0] else parts.dropLast(1).joinToString(", ") + " and " + parts.last()
         return "$head ${list.replaceFirstChar { it.uppercase() }}."
+    }
+
+    /** The day's [steps] against the [goal] in words: under half is well short, from 80% close, the goal itself past. */
+    fun stepsAgainstGoal(steps: Int, goal: Int): String = when {
+        steps >= goal -> "past your step goal"
+        steps >= goal * 0.8 -> "close to your step goal"
+        steps >= goal / 2 -> "short of your step goal"
+        else -> "well short of your step goal"
     }
 
     /** "Bedtime in 1 h 10" until your usual [bedtime], read on a clock that starts at noon; null once it's passed. */

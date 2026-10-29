@@ -72,12 +72,26 @@ class FrameRulesTest {
         assertEquals(13f, GrowMotion.outline(chip, page, 0f).topLeftCornerRadius.x, 1e-4f)
     }
 
-    @Test fun `it grows at 500 and shrinks at 300, fading in only at the start`() {
+    @Test fun `it grows at 500 and shrinks at 300, the surface at once and the content once it has some size`() {
         assertEquals(500f, GrowMotion.stiffness(opening = true))
         assertEquals(300f, GrowMotion.stiffness(opening = false))
         assertEquals(0f, GrowMotion.alpha(0f))
-        assertEquals(1f, GrowMotion.alpha(GrowMotion.FADE_PART))
-        assertEquals(1f, GrowMotion.alpha(1f))
+        assertEquals(1f, GrowMotion.alpha(GrowMotion.SURFACE_PART))
+        assertEquals(0f, GrowMotion.contentAlpha(GrowMotion.CONTENT_FROM))
+        assertEquals(1f, GrowMotion.contentAlpha(0.5f))
+        assertEquals(1f, GrowMotion.contentAlpha(1f))
+    }
+
+    @Test fun `the page keeps a card's corners until the end, its content scaled to the outline`() {
+        val button = Rect(Offset(16f, 40f), androidx.compose.ui.geometry.Size(38f, 38f))
+        val page = Rect(0f, 0f, 400f, 800f)
+        assertEquals(28f, GrowMotion.outline(button, page, GrowMotion.SQUARE_FROM, 28f).topLeftCornerRadius.x, 1e-3f)
+        assertEquals(0f, GrowMotion.outline(button, page, 1f, 28f).topLeftCornerRadius.x, 1e-3f)
+        assertEquals(0.5f, GrowMotion.contentScale(200f, 400f), 1e-4f)
+        // The tab behind: dimmed by half and at 94% with the page open, untouched with it closed.
+        assertEquals(0.5f, GrowMotion.scrim(1f), 1e-4f)
+        assertEquals(0.94f, GrowMotion.sink(1f), 1e-4f)
+        assertEquals(1f, GrowMotion.sink(0f), 1e-4f)
     }
 
     @Test fun `You and Strap grow from the header's buttons`() {

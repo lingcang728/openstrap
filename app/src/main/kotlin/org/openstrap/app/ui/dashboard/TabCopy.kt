@@ -277,7 +277,7 @@ object TabCopy {
     /* ---------------------------------------------- Workouts --------------------------------------------- */
 
     /** The quiet tag beside a workout the strap found by itself, or filed under its generic "Activity". */
-    const val FOUND_BY_STRAP = "Found by the strap"
+    const val AUTO_DETECTED = "Auto-detected"
 
     /** Which fact leads a workout's line, by sport. */
     enum class SportFact { Run, Walk, Strength, Other }
@@ -348,6 +348,9 @@ object TabCopy {
     /** "First estimate Sunday 22 Nov", before there's a number. */
     fun firstEstimate(sunday: LocalDate, locale: Locale = Locale.getDefault()): String =
         "First estimate " + sunday.format(DateTimeFormatter.ofPattern("EEEE d MMM", locale))
+
+    /** Habit Age before its first estimate, under your own age in its place: "Your age for now", then what it waits for. */
+    fun habitAgeForNow(waiting: String?): String = if (waiting.isNullOrBlank()) "Your age for now" else "Your age for now. $waiting"
 
     /** Habit Age's one status line, and whether the number moved, which alone takes the orchid. */
     data class HabitAgeLine(val text: String, val moved: Boolean)

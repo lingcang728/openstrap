@@ -28,7 +28,8 @@ enum class Hue { Recovery, Charge, Sleep, Heart, Steps, Load, HabitAge, Neutral,
  * tier and edge alone.
  */
 enum class Shape {
-    Card, Small, Tall;
+    /** An unlit strip ([Tier.List] at [CardSize.Strip]): with no light to tell them apart, its height does. */
+    Card, Small, Tall, Strip;
 
     companion object {
         fun of(size: CardSize): Shape = when (size) {

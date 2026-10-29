@@ -178,7 +178,8 @@ fun GlowActivityScreen(
  */
 @Composable
 private fun StartCard(sports: List<SportUse>, onStart: (Int) -> Unit, onAllSports: () -> Unit) {
-    EdgeCard(EdgeNeutral, Modifier.fillMaxWidth(), kind = EdgeKind.Value) {
+    // Unlit (its look), with the heart-red light travelling round its border, as on Today.
+    EdgeCard(EdgeNeutral, Modifier.fillMaxWidth().movingBorder(MetricColors.heart), kind = EdgeKind.Value) {
         EdgeTitle("Start a workout", null)
         Spacer(Modifier.height(GlowLayout.TitleGap))
         // Four even columns up to the phone's width, so the tiles keep together on an unfolded screen.
@@ -188,7 +189,7 @@ private fun StartCard(sports: List<SportUse>, onStart: (Int) -> Unit, onAllSport
                     onStart(s.sportType)
                 }
             }
-            SportTile(AppIcons.GridView, "All sports", outdoor = false, Modifier.weight(1f), onClick = onAllSports)
+            SportTile(AppIcons.MoreHorizontalCircle01, "All sports", outdoor = false, Modifier.weight(1f), onClick = onAllSports)
         }
     }
 }
@@ -429,7 +430,7 @@ private val EffortGap = 12.dp
 
 /**
  * A workout as a list row: its sport's toned white icon on the effort light (a heart-red glow as strong as the
- * workout's Load against your [usual], [Workouts.effort]), the sport with "Found by the strap" when the strap logged
+ * workout's Load against your [usual], [Workouts.effort]), the sport with "Auto-detected" when the strap logged
  * it by itself, the sport's one fact and the start time ([TabCopy.workoutFact]), and the duration in dots. A thin zone
  * bar under it, lined up with the name. [divider] draws the hairline above.
  */
@@ -466,7 +467,7 @@ internal fun WorkoutRow(a: WorkoutAnalysis, usual: Float?, divider: Boolean, onC
                 )
             }
             Spacer(Modifier.width(12.dp))
-            DotMatrixText(workoutClock(a.activeSeconds), dot = DotSize.Row, color = Color.White)
+            Text(workoutClock(a.activeSeconds), color = Color.White, style = GlowType.rowValue, maxLines = 1)
             Spacer(Modifier.width(RowCaretGap))
             TapCaret(ROW_CARET_ALPHA)
         }
@@ -502,11 +503,11 @@ private fun EffortLight(icon: androidx.compose.ui.graphics.vector.ImageVector, e
     }
 }
 
-/** "Found by the strap": a quiet outlined label beside the sport's name. */
+/** "Auto-detected": a quiet outlined label beside the sport's name. */
 @Composable
 internal fun FoundTag() {
     Text(
-        TabCopy.FOUND_BY_STRAP, color = Color.White.copy(alpha = 0.7f), style = GlowType.secondary.copy(fontSize = 11.sp, lineHeight = 14.sp),
+        TabCopy.AUTO_DETECTED, color = Color.White.copy(alpha = 0.7f), style = GlowType.secondary.copy(fontSize = 11.sp, lineHeight = 14.sp),
         maxLines = 1,
         modifier = Modifier.border(1.dp, Color.White.copy(alpha = 0.19f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp),
     )

@@ -203,15 +203,15 @@ internal fun CheckInStrip(feeling: Int?, onCheckIn: (Int?) -> Unit, modifier: Mo
     }
 
 /**
- * Start a workout (spec 4.2): heart light from below, the title with your usual sport under it ("Outdoor run, your
- * usual") and a white play button. One thing to do, so the whole strip is the button and has no caret; it opens Ready
- * with that sport.
+ * Start a workout (spec 4.2): unlit, with a heart-red light travelling round its border ([movingBorder]), the title
+ * with your usual sport under it ("Outdoor run, your usual") and a white play button. One thing to do, so the whole
+ * strip is the button and has no caret; it opens Ready with that sport.
  */
 @Composable
 internal fun StartWorkoutStrip(sport: Int, onStart: (Int) -> Unit, modifier: Modifier = Modifier) {
     val name = Workouts.sportName(sport)
     // A strip that does one thing is a button: its title is plain text, with no caret (spec 2.5, Tappable says so).
-    TodayStrip(MetricColors.heart, EdgeKind.Value, modifier, onClick = { onStart(sport) }) {
+    TodayStrip(MetricColors.heart, EdgeKind.Value, modifier.movingBorder(MetricColors.heart), onClick = { onStart(sport) }) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("Start a workout", color = Color.White, style = GlowType.cardTitle, maxLines = 1)
@@ -370,6 +370,8 @@ internal fun ActivityCard(
     state: DayUiState, onClick: () -> Unit, modifier: Modifier = Modifier, usual: List<Float>? = null, upTo: String? = null,
     /** The Partial day tag when the strap was worn for part of the day ([TitleTag]). */
     tag: TitleTag? = null,
+    /** The day's count in dots; false leads with the sentence, where the hero above already has the count. */
+    count: Boolean = true,
 ) {
     val goal = org.openstrap.app.ui.dashboard.LocalGoals.current.steps
     val isToday = state.date == java.time.LocalDate.now()
@@ -386,7 +388,9 @@ internal fun ActivityCard(
         progress = if (chart || goal <= 0) null else state.steps / goal.toFloat(), onClick = onClick,
     ) {
         EdgeTitle("Steps", "Goal %,d".format(goal), marker = upTo, tag = tag)
-        EdgeValue("%,d".format(state.steps), "steps", org.openstrap.app.ui.dashboard.ActivityCopy.activityLine(state.steps, goal, pace, isToday))
+        val sentence = org.openstrap.app.ui.dashboard.ActivityCopy.activityLine(state.steps, goal, pace, isToday)
+        if (count) EdgeValue("%,d".format(state.steps), "steps", sentence)
+        else Text(sentence, color = Color.White, style = GlowType.body, modifier = Modifier.padding(top = 10.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
         if (chart) {
             Spacer(Modifier.height(10.dp))
             GhostLine(
@@ -536,6 +540,8 @@ internal fun SmallCard(
     waiting: Boolean = false,
     /** How far toward its goal or usual, 0..1, for a [EdgeKind.Progress] Small's bar ([EdgeCard]). */
     progress: Float? = null,
+    /** The number as plain text ([GlowType.smallValue]), for a Small that breaks down the card beside it. */
+    plain: Boolean = false,
 ) {
     EdgeCard(color, modifier, status = edgeStatus, kind = kind, progress = progress, onClick = onClick) {
         CardTitle(title)
@@ -546,7 +552,11 @@ internal fun SmallCard(
             return@EdgeCard
         }
         Row(verticalAlignment = Alignment.Bottom) {
-            if (value != null) DotMatrixText(value, Modifier.cardNumber(value), dot = DotSize.Edge) else WaitingDash(Modifier.padding(vertical = 8.dp))
+            when {
+                value == null -> WaitingDash(Modifier.padding(vertical = 8.dp))
+                plain -> Text(value, Modifier.cardNumber(value), color = Color.White, style = GlowType.smallValue, maxLines = 1)
+                else -> DotMatrixText(value, Modifier.cardNumber(value), dot = DotSize.Edge)
+            }
             if (unit != null && value != null) Text(unit, color = Color.White.copy(alpha = 0.7f), style = GlowType.secondary, modifier = Modifier.padding(start = 6.dp))
         }
         extra?.invoke()

@@ -92,7 +92,7 @@ fun PhoneAlertsScreen(alerts: PhoneAlerts, settings: SettingsStore, contentPaddi
         item {
             PagePanel {
                 PageSwitchRow(
-                    "Incoming calls", "The strap buzzes while your phone rings, and for calls from apps like WhatsApp with notification access. With Do Not Disturb on, only if it allows calls from anyone.",
+                    "Incoming calls", "Buzzes while your phone rings. App calls like WhatsApp need notification access.",
                     calls && callPermission,
                     { on ->
                         when {
@@ -117,12 +117,12 @@ fun PhoneAlertsScreen(alerts: PhoneAlerts, settings: SettingsStore, contentPaddi
                         callPreviewError?.let { PageNote(it, color = MetricColors.warn) }
                     }
                 }
-                PageSwitchRow("Notifications", "The strap buzzes for notifications that would make a sound.", notifications && notificationAccess, { on ->
+                PageSwitchRow("Notifications", "Buzzes for notifications that make a sound.", notifications && notificationAccess, { on ->
                     scope.launch { settings.setBuzzOnNotifications(on) }
                     if (on && !notificationAccess) openNotificationAccess()
                 })
                 if (notifications && !notificationAccess) {
-                    PageNote("Allow notification access for OpenStrap to turn this on.", color = MetricColors.warn)
+                    PageNote("Needs notification access.", color = MetricColors.warn)
                     PageButton("Open settings", openNotificationAccess, Modifier.fillMaxWidth())
                 }
                 if (notifications && notificationAccess) {
@@ -139,7 +139,8 @@ fun PhoneAlertsScreen(alerts: PhoneAlerts, settings: SettingsStore, contentPaddi
                         previewError?.let { PageNote(it, color = MetricColors.warn) }
                     }
                 }
-                PageNote("Silent apps and Do Not Disturb are followed. OpenStrap never reads what a notification says.")
+                // Do Not Disturb is said once, here, for calls and notifications both.
+                PageNote("Follows Do Not Disturb and silent apps. Never reads what a notification says.")
             }
         }
     }

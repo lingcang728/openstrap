@@ -43,6 +43,7 @@ import org.openstrap.app.ui.components.rememberHaptics
 import org.openstrap.app.ui.dashboard.DailyHistory
 import org.openstrap.app.ui.dashboard.DayUiState
 import org.openstrap.app.ui.dashboard.Hue
+import org.openstrap.app.ui.dashboard.Tier
 import org.openstrap.app.ui.dashboard.defaultLook
 import org.openstrap.app.ui.dashboard.lookOr
 import org.openstrap.app.ui.dashboard.todayPanes
@@ -232,6 +233,8 @@ fun GlowTodayScreen(
                             val override = EdgeOverride(
                                 edge = look.edge.takeIf { it != own.edge },
                                 color = EdgeNeutral.takeIf { look.hue == Hue.Neutral && own.hue != Hue.Neutral },
+                                // An unlit card drawn as an edge card (Last night, Your week, Start) skips its light.
+                                plain = look.tier == Tier.List,
                             )
                             CompositionLocalProvider(LocalEdgeOverride provides override) {
                                 Column(m.then(dim)) {
@@ -241,6 +244,7 @@ fun GlowTodayScreen(
                                             running, onOpenRunning, onResumeRunning, onStartSport, onOtherSport, onPair, onSyncNow,
                                             onOpenRecovery, onOpenWorkout, onRetryRecovery,
                                             onOpenScore = { onOpen(org.openstrap.app.ui.dashboard.Detail.OfScore(it)) },
+                                            energyHidden = slots.none { it.card == TodayCard.Charge },
                                         )
                                         TodayCard.EditToday -> EditTodayButton({ editing = true })
                                         else -> TodayRow(slot, ctx, healthspan, history, checkIn, onCheckIn, onOpenMetric,
@@ -293,6 +297,9 @@ private class TodayContext(
     /** Today's Recovery is the first real score (E4). */
     val firstScore: Boolean,
 ) {
+    /** The evening and night hero shows the day's steps in dots ([EveningHero]), so the Steps card needn't. */
+    val stepsInHero: Boolean get() = (moment == Moment.Evening || moment == Moment.Night) && !stuck
+
     /** "Up to 09:40" for a card whose [newest] reading is stale while syncing has stopped ([upToMarker]). */
     fun upTo(newest: Long?): String? = upToMarker(newest, now, stopped, isToday, zone, staleAfter)
 
@@ -369,6 +376,8 @@ private fun Hero(
      * heroes, as the Charge battery on Recovery does.
      */
     onOpenScore: (org.openstrap.app.ui.dashboard.Score) -> Unit,
+    /** The Energy card is hidden in Edit Today, so the evening hero says Energy itself. */
+    energyHidden: Boolean = false,
 ) {
     val onOpenCharge = { onOpenScore(org.openstrap.app.ui.dashboard.Score.Charge) }
     // Every hero is as high as its content with the card padding around it. The floor is only a Wide's height, under
@@ -405,7 +414,7 @@ private fun Hero(
             HeroKind.NoSleep -> ChargeHero(ctx, onOpenCharge, onRetryRecovery, m, noSleep = true)
             HeroKind.Window -> WindowHero(ctx, lightAngle, onStartSport, onOtherSport, m)
             HeroKind.After -> AfterHero(ctx, lightAngle, onOpenWorkout, m)
-            HeroKind.Evening -> EveningHero(ctx, lightAngle, bedtime, onOpenRecovery, m)
+            HeroKind.Evening -> EveningHero(ctx, lightAngle, bedtime, energyHidden, onOpenRecovery, m)
             HeroKind.During -> (running ?: lastRunning.value)?.let { DuringHero(ctx, it, onOpenRunning, onResumeRunning, m) }
         }
     }
@@ -594,12 +603,13 @@ private fun AfterHero(ctx: TodayContext, lightAngle: Float?, onOpenWorkout: (Lon
 }
 
 /**
- * Evening and night: the day in a sentence, the steps in dots with Load and Charge left as text beside them, and how
+ * Evening and night: the day in a sentence (Load in it), the steps in dots, Energy left under them only when
+ * [energyHidden] (its card, normally right under the hero, is hidden in Edit Today), and how
  * long until your usual bedtime. Evening violet from the lower right in the evening, Sleep blue from below at night
  * (spec 4.2), each in its mood.
  */
 @Composable
-private fun EveningHero(ctx: TodayContext, lightAngle: Float?, bedtime: LocalTime?, onOpen: () -> Unit, modifier: Modifier) {
+private fun EveningHero(ctx: TodayContext, lightAngle: Float?, bedtime: LocalTime?, energyHidden: Boolean, onOpen: () -> Unit, modifier: Modifier) {
     val goals = LocalGoals.current
     val nouns = ctx.dayWorkouts.map { sportNoun(it.workout.sportType) }
     val night = ctx.moment == Moment.Night
@@ -608,11 +618,17 @@ private fun EveningHero(ctx: TodayContext, lightAngle: Float?, bedtime: LocalTim
     GlowCard(if (night) style else style.copy(bodyLightness = EVENING_BODY), modifier, onClick = onOpen) {
         Column {
             GlowHeader("Today", trailing = TodayCopy.bedtimeIn(LocalTime.now(), bedtime), marker = ctx.upTo(ctx.newest), tag = ctx.partial)
-            HeroSentence(TodayCopy.evening(nouns, ctx.state.steps, goals.steps, ctx.loadStatus))
+            // The count is in dots below, so the sentence says the steps against the goal instead.
+            HeroSentence(TodayCopy.evening(nouns, ctx.state.steps, goals.steps, ctx.loadStatus, stepCount = false))
             Spacer(Modifier.height(24.dp))
-            // Figures it doesn't have yet are left out, never a lone dash in the hero.
-            val rest = listOfNotNull(ctx.rec?.load?.let { "Load ${Math.round(it)}" }, ctx.charge?.let { "Energy $it left" })
-            HeroNumber("%,d".format(ctx.state.steps), listOfNotNull("steps", rest.joinToString(", ").ifEmpty { null }))
+            HeroNumber("%,d".format(ctx.state.steps), listOf("steps"))
+            // Load is said in the sentence, and Energy has its own card right under the hero. Only with that card
+            // hidden in Edit Today does Energy come back here, last and full width, never a lone dash.
+            val energy = ctx.charge?.takeIf { energyHidden }
+            if (energy != null) Text(
+                "Energy $energy left", color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary,
+                maxLines = 1, modifier = Modifier.padding(top = 10.dp),
+            )
         }
     }
 }
@@ -734,7 +750,11 @@ private fun TodayRow(
             upTo = if (ctx.live == null) ctx.upTo(s.heartRate.lastOrNull()?.x) else null,
         )
         // Steps come in the same records as the rest of the day, so the day's newest reading is how far they go.
-        TodayCard.Activity -> ActivityCard(s, { onOpenMetric(Metric.Steps) }, usual = usualSteps, upTo = ctx.upTo(ctx.newest), tag = ctx.partial)
+        // In the evening and at night the hero has the day's steps in dots, so the card leads with its sentence.
+        TodayCard.Activity -> ActivityCard(
+            s, { onOpenMetric(Metric.Steps) }, usual = usualSteps, upTo = ctx.upTo(ctx.newest), tag = ctx.partial,
+            count = !ctx.stepsInHero,
+        )
         TodayCard.Recovery -> RecoveryEarlierCard(ctx.recoveryShown, { openScore(org.openstrap.app.ui.dashboard.Score.Recovery) }, failure = ctx.recoveryFailure, onRetry = onRetryRecovery)
         TodayCard.Charge -> {
             val c = ctx.rec?.charge

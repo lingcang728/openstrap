@@ -54,6 +54,15 @@ object GlowType {
     /** White for [caption] text. */
     const val CAPTION_ALPHA = 0.5f
 
+    /** A list row's value: Sans 500, 20 on 24, tabular so a column of values lines up. Plain text, never dots. */
+    val rowValue = TextStyle(fontFamily = FunnelSans, fontWeight = FontWeight.Medium, fontSize = 20.sp, lineHeight = 24.sp, fontFeatureSettings = "tnum")
+
+    /**
+     * A Small that breaks down the card beside it (Recharged, Drained): Display 300, 34 on 36, tabular. Plain, since
+     * the dotted answer is the other card's.
+     */
+    val smallValue = TextStyle(fontFamily = FunnelDisplay, fontWeight = FontWeight.Light, fontSize = 34.sp, letterSpacing = (-0.02).em, lineHeight = 36.sp, fontFeatureSettings = "tnum")
+
     @Deprecated("Not a role in spec 2.3. Workout pages move to pageTitle (step 9).")
     val headline = TextStyle(fontFamily = FunnelDisplay, fontWeight = FontWeight.Light, fontSize = 26.sp, letterSpacing = (-0.02).em, lineHeight = 30.sp)
 
@@ -69,7 +78,7 @@ object GlowType {
  * the same kind of number is the same size on every screen.
  */
 enum class DotSize(val dot: Dp) {
-    /** List row values. */
+    /** Four or more figures side by side ([FigureRow]). List rows are plain text ([GlowType.rowValue]). */
     Row(2.4.dp),
 
     /** Edge cards and Smalls. */
