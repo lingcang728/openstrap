@@ -462,7 +462,10 @@ private fun Vo2Detail(ctx: ActivityDetailContext) {
 
 /* ------------------------------------------ Time to recover ----------------------------------------- */
 
-/** Time to recover: the hours left after your latest workout that says, and the recent workouts' own estimates. */
+/**
+ * Time to recover: the hours left after your latest workout that says (never less than what earlier ones left), the
+ * workout they count from ([Workouts.recoverySource]), and the recent workouts' own estimates.
+ */
 @Composable
 private fun RecoverDetail(ctx: ActivityDetailContext) {
     val color = MetricColors.load
@@ -473,10 +476,11 @@ private fun RecoverDetail(ctx: ActivityDetailContext) {
     val last = rated.firstOrNull()
     val left = last?.let { TodayCopy.recoverLeft(it.end, it.recoveryMinutes ?: 0, now) }
     val shown = left?.let { TodayCopy.recoverShort(it, now, zone) }
-    val ended = last?.let { w -> Instant.ofEpochSecond(w.end).atZone(zone).let { ActivityCopy.ended(it.toLocalDate(), it.format(CLOCK), ctx.today) } }
+    val source = org.openstrap.app.data.Workouts.recoverySource(rated)
+    val ended = source?.let { w -> Instant.ofEpochSecond(w.end).atZone(zone).let { ActivityCopy.ended(it.toLocalDate(), it.format(CLOCK), ctx.today) } }
     val headline = when {
         last == null -> DetailHeadline.none("No estimate", "After a workout the strap rates")
-        shown?.first == null -> DetailHeadline.none("Recovered", "After your ${last.sportName.lowercase()}, $ended")
+        shown?.first == null -> DetailHeadline.none("Recovered", "After your ${(source ?: last).sportName.lowercase()}, $ended")
         else -> DetailHeadline(shown.first!!, if (shown.first == "1") "hour to go" else "hours to go", shown.second)
     }
     val withData = rated.map { Instant.ofEpochSecond(it.end).atZone(zone).toLocalDate() }.toSet()
@@ -486,13 +490,15 @@ private fun RecoverDetail(ctx: ActivityDetailContext) {
         ranges = listOf(Range.Day), range = Range.Day, onRange = {},
     ) {
         // Recovered says which workout under the word already.
-        if (last != null && shown?.first != null && ended != null) item { DetailSentence(ActivityCopy.recover(last.sportName, ended)) }
+        if (source != null && shown?.first != null && ended != null) item { DetailSentence(ActivityCopy.recover(source.sportName, ended)) }
         if (rated.isNotEmpty()) item {
             ListPanel(Modifier.padding(top = 8.dp), title = "Recent workouts") {
                 rated.take(5).forEachIndexed { i, w ->
                     val start = Instant.ofEpochSecond(w.shownStart).atZone(zone)
+                    // Its own, not what earlier workouts left on top ([SummaryCopy.carriedOver]).
+                    val own = org.openstrap.app.ui.workout.SummaryCopy.recoverSpan(w.ownRecoveryMinutes ?: w.recoveryMinutes) ?: "None"
                     ListRow(
-                        w.sportName, color, ((w.recoveryMinutes ?: 0) + 59).div(60).toString(), "Hours needed, ${start.format(DAY)}, ${start.format(CLOCK)}",
+                        w.sportName, color, own, "On its own, ${start.format(DAY)}, ${start.format(CLOCK)}",
                         divider = i > 0, onClick = { ctx.onOpen(Detail.Workout(w.workout.start)) }, icon = org.openstrap.app.ui.workout.SportIcons.of(w.workout.sportType), iconTint = SportIconTint,
                     )
                 }

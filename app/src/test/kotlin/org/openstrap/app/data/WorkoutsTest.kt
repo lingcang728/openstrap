@@ -153,4 +153,16 @@ class WorkoutsTest {
         // The strap noticed only the last 37 minutes: a third of it, so the model stands.
         org.junit.Assert.assertFalse(Workouts.strapCovers((start + 4638)..(start + 6876), walk))
     }
+
+    @Test
+    fun recoveryCountsFromTheWorkoutWhoseOwnRunsOutLast() {
+        // A long walk ending 23:31 that needs 17 h, then a 6-minute walk at 00:15 that needs 35 min of its own and
+        // carries the long one's 16 h: the time left counts from the long walk.
+        val long = Workouts.analyse(workout(), emptyList(), emptyList(), 190).copy(end = start, recoveryMinutes = 1022, ownRecoveryMinutes = 1022)
+        val short = Workouts.analyse(workout(), emptyList(), emptyList(), 190).copy(end = start + 3000, recoveryMinutes = 978, ownRecoveryMinutes = 35)
+        assertEquals(long, Workouts.recoverySource(listOf(short, long)))
+        // Without its own, a workout's whole time stands.
+        val unknown = short.copy(ownRecoveryMinutes = null)
+        assertEquals(unknown, Workouts.recoverySource(listOf(unknown, long)))
+    }
 }

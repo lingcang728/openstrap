@@ -145,6 +145,14 @@ object Workouts {
         return length > 0 && overlap >= length * STRAP_EFFECT_COVER && sameWorkout(strap, phone)
     }
 
+    /**
+     * The workout of [rated] the time left to recover counts from: the one whose own recovery runs out last (its end
+     * plus [WorkoutAnalysis.ownRecoveryMinutes], else its whole time), so a short walk after a long one points at the
+     * long one, whose hours it carries.
+     */
+    fun recoverySource(rated: List<WorkoutAnalysis>): WorkoutAnalysis? =
+        rated.maxByOrNull { it.end + 60L * (it.ownRecoveryMinutes ?: it.recoveryMinutes ?: 0) }
+
     /** The phone workout of [phone] that [w] is the strap's record of ([sameWorkout]), if any. */
     fun phoneTwin(w: Workout, phone: List<org.openstrap.app.data.db.AppWorkout>, now: Long): org.openstrap.app.data.db.AppWorkout? =
         phone.firstOrNull { sameWorkout(w.start..w.end, phoneRange(it, now)) }
