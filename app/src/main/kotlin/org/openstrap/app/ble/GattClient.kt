@@ -98,6 +98,15 @@ class GattClient(private val context: Context, private val address: String) {
         }
     }
 
+    private fun Throwable.isDeadBinder(): Boolean =
+        generateSequence(this) { it.cause }.any { it is android.os.DeadObjectException }
+
+    /** Called when Bluetooth turns off: no callback reports the link's end then either. */
+    fun lost() {
+        _connected.value = false
+        fail("Bluetooth turned off")
+    }
+
     private fun complete(value: Any?) { pending?.complete(value) }
     private fun fail(message: String) { pending?.completeExceptionally(GattException(message)) }
 
@@ -105,7 +114,16 @@ class GattClient(private val context: Context, private val address: String) {
         val d = CompletableDeferred<Any?>()
         pending = d
         try {
-            if (!start()) throw GattException("GATT operation could not be started")
+            val started = try {
+                start()
+            } catch (e: RuntimeException) {
+                // The phone's Bluetooth service died (a stack restart): this handle is dead and no disconnect callback
+                // will ever come, so report the link lost here and let the owner reconnect with a fresh one.
+                if (!e.isDeadBinder()) throw e
+                _connected.value = false
+                throw GattException("Bluetooth restarted on the phone")
+            }
+            if (!started) throw GattException("GATT operation could not be started")
             @Suppress("UNCHECKED_CAST")
             withTimeout(timeoutMs) { d.await() } as T
         } finally {

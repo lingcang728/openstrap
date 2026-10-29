@@ -134,6 +134,8 @@ class HistorySync(
                     if (spec.followedBy == HistoryDataType.SPORT_DETAIL) syncWorkouts(spec) else syncType(spec)
                 } catch (e: Exception) {
                     if (e is kotlinx.coroutines.CancellationException || e is FastRechargeModeException) throw e
+                    // The link is gone: every later type would fail the same way, and the sync must not end as Done.
+                    if (!gatt.connected.value) throw e
                     log("history ${spec.type}: $e")
                 }
             }
@@ -149,7 +151,9 @@ class HistorySync(
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             log("history failed: $e")
-            state.value = SyncState.Failed(e.message ?: "Sync failed")
+            // A wrapped system error's message is just its class name (android.os.DeadObjectException), not for the card.
+            val reason = e.message?.takeUnless { e.cause != null && it == e.cause.toString() }
+            state.value = SyncState.Failed(reason ?: "Sync failed")
         } finally {
             listeners.cancel()
         }

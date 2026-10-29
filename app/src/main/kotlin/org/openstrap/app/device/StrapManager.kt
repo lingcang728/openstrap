@@ -165,6 +165,12 @@ class StrapManager(
 
     private fun scheduleReconnect() {
         if (!wantConnected) return
+        // Every attempt would fail at once; Bluetooth coming back on reconnects (see bluetoothChanged), as Zepp waits too.
+        if (context.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter?.isEnabled == false) {
+            log("bluetooth is off, reconnecting once it's back on")
+            reconnectJob?.cancel()
+            return
+        }
         val wait = RETRY_SECONDS[minOf(retries, RETRY_SECONDS.lastIndex)]
         retries++
         log("reconnecting in ${wait}s")
@@ -380,12 +386,39 @@ class StrapManager(
         }
     }
 
+    /**
+     * Bluetooth turned off or on, which includes the stack restarting after a crash. Off ends the link at once, since
+     * no disconnect callback comes then; on reconnects without waiting out the backoff.
+     */
+    private val bluetoothChanged = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: Context, intent: android.content.Intent) {
+            when (intent.getIntExtra(android.bluetooth.BluetoothAdapter.EXTRA_STATE, -1)) {
+                android.bluetooth.BluetoothAdapter.STATE_TURNING_OFF, android.bluetooth.BluetoothAdapter.STATE_OFF -> {
+                    val client = gatt ?: return
+                    log("bluetooth turned off")
+                    client.lost()
+                }
+                android.bluetooth.BluetoothAdapter.STATE_ON -> scope.launch {
+                    if (!wantConnected || connection.value is ConnectionState.Connected || connectJob?.isActive == true) return@launch
+                    log("bluetooth back on, reconnecting")
+                    retries = 0
+                    reconnectJob?.cancel()
+                    startConnect()
+                }
+            }
+        }
+    }
+
     init {
         val filter = android.content.IntentFilter().apply {
             addAction(android.content.Intent.ACTION_TIMEZONE_CHANGED)
             addAction(android.content.Intent.ACTION_TIME_CHANGED)
         }
         androidx.core.content.ContextCompat.registerReceiver(context, timeChanged, filter, androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
+        androidx.core.content.ContextCompat.registerReceiver(
+            context, bluetoothChanged, android.content.IntentFilter(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         // The app was stopped while it knew the wear state: close that interval now, as nothing is connected yet.
         val now = System.currentTimeMillis() / 1000
         wearEvents.post { if (dao.lastWearEvent()?.worn != null) dao.insertWearEvent(WearEventRow(now, null)) }
