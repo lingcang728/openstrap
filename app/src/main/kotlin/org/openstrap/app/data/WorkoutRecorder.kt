@@ -169,18 +169,22 @@ object WorkoutRecorder {
     /**
      * The running kcal while [w] records, from [minutes] ([kcalMinutes] with [now]): every minute that has ended, and
      * the one under way for the share of it gone. Never below [previous], so the figure only climbs, even when a
-     * minute's mean heart rate drops before it ends or a history fill reworks one.
+     * minute's mean heart rate drops before it ends or a history fill reworks one. With [active] (the workout's active
+     * ranges), a minute counts only for its seconds inside them, so a pause holds the figure instead of letting the
+     * minute it began in fill up with the clock.
      */
-    fun liveKcal(minutes: List<EnergyExpenditure.WorkoutMinute>, now: Long, previous: Kcal? = null): Kcal {
-        var active = 0.0
+    fun liveKcal(minutes: List<EnergyExpenditure.WorkoutMinute>, now: Long, previous: Kcal? = null, active: List<LongRange>? = null): Kcal {
+        var activeKcal = 0.0
         var total = 0.0
         for (m in minutes) {
             if (m.t > now) break
-            val share = ((now - m.t) / 60.0).coerceAtMost(1.0)
-            active += m.activeKcal * share
+            val hi = minOf(m.t + 60, now)
+            val seconds = active?.sumOf { r -> (minOf(hi, r.last + 1) - maxOf(m.t, r.first)).coerceAtLeast(0) } ?: (hi - m.t)
+            val share = (seconds / 60.0).coerceAtMost(1.0)
+            activeKcal += m.activeKcal * share
             total += m.kcal * share
         }
-        return Kcal(maxOf(active.toFloat(), previous?.active ?: 0f), maxOf(total.toFloat(), previous?.total ?: 0f))
+        return Kcal(maxOf(activeKcal.toFloat(), previous?.active ?: 0f), maxOf(total.toFloat(), previous?.total ?: 0f))
     }
 
     /**
@@ -219,7 +223,7 @@ object WorkoutRecorder {
     ): Kcal? {
         val hr = (history.filter { it.fromHistory } + live.map { AppWorkoutHeartRate(w.start, it.first, it.second) }).sortedBy { it.timestamp }
         val minutes = kcalMinutes(w, hr, minuteSteps(stepTotals) + syncedSteps, restingHr, maxHr, profile, age, vo2max, now) ?: return previous
-        return liveKcal(minutes, now, previous)
+        return liveKcal(minutes, now, previous, Recovery.activeRanges(w, now))
     }
 
     /** Longer than this between two step totals, the strap was away: its steps aren't spread over the gap. */

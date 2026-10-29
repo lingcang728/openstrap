@@ -221,6 +221,18 @@ class WorkoutRecorderTest {
     }
 
     @Test
+    fun liveKcalHoldsWhilePaused() {
+        // Paused 30 s in, flat out until then: the minute it began in counts for its 30 active seconds only.
+        val w = AppWorkout(start, null, 1, pausedAt = start + 30)
+        val hr = live(start, start + 30) { 190 }
+        fun at(now: Long) = WorkoutRecorder.liveKcal(minutes(w, hr, now = now), now, active = Recovery.activeRanges(w, now))
+        val atPause = at(start + 30)
+        assertEquals(EnergyExpenditure.net(10.8f, 70f) / 2, atPause.active, 1e-3f)
+        // Four minutes later, still paused: the same, not a whole minute's worth.
+        assertEquals(atPause, at(start + 270))
+    }
+
+    @Test
     fun aDayCountsItsPhoneWorkoutExactly() {
         // 30 minutes: 150 bpm for 15, then 120; the last ten minutes walked at 120 spm.
         val w = AppWorkout(start, start + 1800, 1)
