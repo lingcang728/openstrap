@@ -100,6 +100,8 @@ object EnergyExpenditure {
         val workoutKcal: Float = 0f,
         val walkingKcal: Float = 0f,
         val hourly: Hourly = Hourly(),
+        /** The walking minutes behind [walkingKcal]: awake, outside workouts, at [CADENCE_MET_STEPS] or more. */
+        val walkingMinutes: Int = 0,
     ) {
         val everydayKcal: Float get() = activeKcal - workoutKcal - walkingKcal
     }
@@ -148,6 +150,7 @@ object EnergyExpenditure {
         val workout = FloatArray(24)
         val walking = FloatArray(24)
         val everyday = FloatArray(24)
+        var walkingMinutes = 0
         for ((k, m) in minutes.withIndex()) {
             var ee = when {
                 m.workoutKcal != null -> maxOf(m.workoutKcal, b)
@@ -165,7 +168,7 @@ object EnergyExpenditure {
             val hour = hourOf(m.t).coerceIn(0, 23)
             when {
                 m.workoutKcal != null -> workout[hour] += active
-                !m.asleep && (m.steps ?: 0) >= CADENCE_MET_STEPS -> walking[hour] += active
+                !m.asleep && (m.steps ?: 0) >= CADENCE_MET_STEPS -> { walking[hour] += active; walkingMinutes++ }
                 else -> everyday[hour] += active
             }
         }
@@ -174,7 +177,7 @@ object EnergyExpenditure {
         return Day(
             total.toFloat(), bmrDay, n, partial, pal, pal != null && (pal < PAL_LOW || pal > PAL_HIGH), hrAssisted,
             activeKcal = workout.sum() + walking.sum() + everyday.sum(), workoutKcal = workout.sum(), walkingKcal = walking.sum(),
-            hourly = Hourly(workout.toList(), walking.toList(), everyday.toList()),
+            hourly = Hourly(workout.toList(), walking.toList(), everyday.toList()), walkingMinutes = walkingMinutes,
         )
     }
 

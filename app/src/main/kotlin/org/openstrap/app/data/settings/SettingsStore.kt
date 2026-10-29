@@ -306,12 +306,14 @@ class SettingsStore(private val context: Context) {
     private val stepGoal = androidx.datastore.preferences.core.intPreferencesKey("goal_steps")
     private val sleepGoal = androidx.datastore.preferences.core.intPreferencesKey("goal_sleep_minutes")
     private val activeGoal = androidx.datastore.preferences.core.intPreferencesKey("goal_active_hours")
+    private val calorieGoal = androidx.datastore.preferences.core.intPreferencesKey("goal_calories")
 
     val goals: Flow<Goals> = context.dataStore.data.map { prefs ->
         Goals(
             prefs[stepGoal] ?: Goals.DEFAULT_STEPS,
             prefs[sleepGoal] ?: Goals.DEFAULT_SLEEP_MINUTES,
             prefs[activeGoal] ?: Goals.DEFAULT_ACTIVE_HOURS,
+            prefs[calorieGoal] ?: Goals.DEFAULT_CALORIES,
         )
     }
 
@@ -320,6 +322,7 @@ class SettingsStore(private val context: Context) {
             it[stepGoal] = g.steps
             it[sleepGoal] = g.sleepMinutes
             it[activeGoal] = g.activeHours
+            it[calorieGoal] = g.calories
         }
     }
 
@@ -389,7 +392,7 @@ class SettingsStore(private val context: Context) {
     /** Forgets the strap and the Zepp sign-in; the user's profile and goals stay. */
     suspend fun forgetDevice() {
         context.dataStore.edit { prefs ->
-            val keep = setOf(birthYear, sex, weight, height, imperial, sleepNeed, maxHr, activityLevel, activityAt, bodyAt, betaBlocker, pregnant, stepGoal, sleepGoal, activeGoal, todayHidden, todayPinned, hcAuto, hcSynced, hcStopped, buzzCalls, buzzNotifications, buzzPattern, callBuzz, backupFolder, backupFolderName, backupDone, backupFailed, backupFailedAt)
+            val keep = setOf(birthYear, sex, weight, height, imperial, sleepNeed, maxHr, activityLevel, activityAt, bodyAt, betaBlocker, pregnant, stepGoal, sleepGoal, activeGoal, calorieGoal, todayHidden, todayPinned, hcAuto, hcSynced, hcStopped, buzzCalls, buzzNotifications, buzzPattern, callBuzz, backupFolder, backupFolderName, backupDone, backupFailed, backupFailedAt)
             prefs.asMap().keys.filter { it !in keep }.forEach { prefs.remove(it) }
         }
     }

@@ -64,6 +64,9 @@ object AppIcons {
     val CaretUpFill: ImageVector by lazy { solid("CaretUpFill", "M5.5 15.5L12 8.5L18.5 15.5Z") }
     val CaretDownFill: ImageVector by lazy { solid("CaretDownFill", "M5.5 8.5L12 15.5L18.5 8.5Z") }
     val User: ImageVector by lazy { line("User", "M20 21.0001C19.713 17.269 16.7289 14.3151 12.995 14.0662L12 13.9999C11.6446 14.0096 11.3134 14.0225 11.0008 14.0378C7.3 14.2192 4.28417 17.3057 4 21.0001", "M8 6.9999A4 4 0 1 0 16 6.9999A4 4 0 1 0 8 6.9999Z") }
+    /** MinusSign and PlusSign, for a goal's step buttons. */
+    val Minus: ImageVector by lazy { line("Minus", "M20 12L4 12") }
+    val Plus: ImageVector by lazy { line("Plus", "M12 4V20M20 12H4") }
     val CaretDown: ImageVector by lazy { line("CaretDown", "M18 9.00005C18 9.00005 13.5811 15 12 15C10.4188 15 6 9 6 9") }
     val Tick02: ImageVector by lazy { line("Tick02", "M5 14L8.5 17.5L19 6.5") }
     val ShutDown: ImageVector by lazy { line("ShutDown", "M7.86907 4C4.97674 5.49689 3 8.51664 3 11.9981C3 16.9686 7.02944 20.9981 12 20.9981C16.9706 20.9981 21 16.9686 21 11.9981C21 8.51664 19.0233 5.49689 16.1309 4", "M12 3V10") }

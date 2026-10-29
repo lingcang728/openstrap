@@ -184,6 +184,22 @@ class HealthRepository(private val dao: HealthDao) {
         dao.dailyPai(DayWindow.of(from, zone).from, DayWindow.of(to, zone).to).map { rows ->
             rows.mapNotNull { r -> DayStat.parseDay(r.day)?.let { it to r } }.toMap()
         }
+
+    /** Each day's stored energy from [from] to [to] ([DailyEnergyHistory]), by local day, for Calories' ranges. */
+    fun dailyEnergy(from: LocalDate, to: LocalDate, zone: ZoneId = ZoneId.systemDefault()): Flow<Map<LocalDate, org.openstrap.app.data.db.DailyEnergyRow>> =
+        dao.dailyEnergy(DayWindow.of(from, zone).from, DayWindow.of(to, zone).from).map { rows ->
+            rows.associateBy { Instant.ofEpochSecond(it.day).atZone(zone).toLocalDate() }
+        }
+
+    /**
+     * The calorie goal the last [org.openstrap.app.data.settings.CalorieGoal.DAYS] suggest: from the active kcal of
+     * their full days, today left out ([org.openstrap.app.data.settings.CalorieGoal.suggested]).
+     */
+    suspend fun suggestedCalorieGoal(today: LocalDate = LocalDate.now(), zone: ZoneId = ZoneId.systemDefault()): Int {
+        val days = org.openstrap.app.data.settings.CalorieGoal.DAYS.toLong()
+        val rows = dao.dailyEnergyOnce(DayWindow.of(today.minusDays(days), zone).from, DayWindow.of(today.minusDays(1), zone).from)
+        return org.openstrap.app.data.settings.CalorieGoal.suggested(rows.filter { !it.partial }.map { it.activeKcal })
+    }
 }
 
 /** Sampled metrics that have a per-day series. */

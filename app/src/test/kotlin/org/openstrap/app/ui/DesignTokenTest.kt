@@ -50,6 +50,8 @@ class DesignTokenTest {
         assertEquals(14.dp, GlowLayout.RowPadding)
         assertEquals(Color(0xFFF66C28), MetricColors.charge)
         assertEquals(Color(0xFFA274F2), MetricColors.evening)
+        assertEquals(Color(0xFFFFD23F), MetricColors.calories)
+        assertEquals(Color(0xFF8C7314), MetricColors.caloriesShade)
     }
 
     @Test fun `glow bodies keep white text readable, and are no darker than they need be`() {
@@ -59,7 +61,7 @@ class DesignTokenTest {
         val inks = listOf(
             MetricColors.readiness, MetricColors.charge, MetricColors.sleepDeep, MetricColors.heart, MetricColors.steps,
             MetricColors.hrv, MetricColors.spo2, MetricColors.stress, MetricColors.temperature, MetricColors.load,
-            MetricColors.habitAge, MetricColors.evening,
+            MetricColors.habitAge, MetricColors.evening, MetricColors.calories,
         )
         inks.forEach { ink ->
             val body = GlowPalette(GlowStyle(ink)).mid.luminance()

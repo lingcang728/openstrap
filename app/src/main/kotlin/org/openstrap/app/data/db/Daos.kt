@@ -568,6 +568,9 @@ interface HealthDao {
     @Query("SELECT * FROM daily_energy WHERE day BETWEEN :from AND :to ORDER BY day")
     suspend fun dailyEnergyOnce(from: Long, to: Long): List<DailyEnergyRow>
 
+    @Query("SELECT * FROM daily_energy WHERE day BETWEEN :from AND :to ORDER BY day")
+    fun dailyEnergy(from: Long, to: Long): Flow<List<DailyEnergyRow>>
+
     @Query("SELECT day FROM daily_energy")
     suspend fun dailyEnergyDaysOnce(): List<Long>
 

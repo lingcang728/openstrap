@@ -36,6 +36,8 @@ data class WorkoutAnalysis(
     val distanceFromSteps: Boolean = false,
     /** A phone strength workout's finished sets; null when none were counted, and always for the strap's. */
     val sets: Int? = null,
+    /** A phone workout's saved active kcal ([org.openstrap.app.data.db.AppWorkout.activeKcal]); null for the strap's. */
+    val activeKcal: Float? = null,
 ) {
     val durationSeconds: Long get() = end - shownStart
 
@@ -163,6 +165,19 @@ object Workouts {
 
     /** Zepp's sport type ids (Type.type in the summary) for the sports a strap is likely to record. */
     fun sportName(type: Int): String = SPORT_NAMES[type] ?: "Workout"
+
+    /**
+     * [a]'s active kcal, rounded: a phone workout's saved figure; a strap workout's kcal less [bmrPerMinute] for each
+     * minute from its start to its stored end, as the day counts its minutes ([RecoveryEngine.energy]), never below
+     * zero. Without a profile ([bmrPerMinute] null) the strap's own figure stands. Null when there's no kcal at all.
+     */
+    fun activeKcal(a: WorkoutAnalysis, bmrPerMinute: Float?): Int? {
+        if (a.fromPhone) return (a.activeKcal ?: a.workout.calories?.toFloat())?.let(Math::round)
+        val kcal = a.workout.calories ?: return null
+        if (bmrPerMinute == null) return kcal
+        val minutes = (a.workout.end - a.workout.start) / 60f
+        return Math.round((kcal - bmrPerMinute * minutes).coerceAtLeast(0f))
+    }
 
     /** Every sport a workout can be started as, by name, one id per name (Zepp has two "Free training"). */
     val sports: List<Pair<Int, String>> by lazy {

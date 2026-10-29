@@ -27,7 +27,7 @@ class StrapPageTest {
         assertEquals("7 h 30", hoursMinutes(450))
         assertEquals("8 h", hoursMinutes(480))
         assertEquals("7 h 05", hoursMinutes(425))
-        assertEquals("8,000 steps, 8 active hours", goalsLine(Goals(steps = 8000, sleepMinutes = 450, activeHours = 8)))
+        assertEquals("8,000 steps, 450 active kcal, 8 active hours", goalsLine(Goals(steps = 8000, sleepMinutes = 450, activeHours = 8, calories = 450)))
         assertEquals("7 h 30. Your sleep need is 8 h", sleepGoalLine(Goals(steps = 8000, sleepMinutes = 450, activeHours = 8), 480))
     }
 }

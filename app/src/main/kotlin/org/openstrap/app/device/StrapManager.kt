@@ -211,6 +211,7 @@ class StrapManager(
                 watchSteps(s)
                 watchDataAvailable(s)
                 watchProfile(s)
+                watchCalorieGoal(s)
                 watchHealthAlerts(s)
                 watchAlarms(s)
                 watchSettings(s)
@@ -432,6 +433,25 @@ class StrapManager(
                 val r = s.request(Endpoints.USER_INFO, payload, 5_000) { it.isNotEmpty() && it.u8(0) == StrapUserProfile.SET + 1 }
                 log("profile sent: ${r.toHex()}")
             }.onFailure { log("profile send failed: $it") }
+        }
+    }
+
+    /**
+     * Sends the calorie goal to the strap as its calorie target (HEALTH key 83, an i16 of active kcal) now and whenever
+     * it changes, as Zepp does, so the strap's own goal buzz matches the app's. Only a strap that reports the key is
+     * written, in the type it reported, and only when it holds another value. Runs in the connect job.
+     */
+    private fun CoroutineScope.watchCalorieGoal(s: ChannelSession) = launch {
+        if (!s.services.has(Endpoints.SETTINGS)) return@launch
+        settings.goals.map { it.calories }.distinctUntilChanged().collect { kcal ->
+            runCatching {
+                val group = SettingsCodec.parse(
+                    settingsQuery(SettingsCodec.GROUP_HEALTH, listOf(SettingsCodec.KEY_CALORIE_TARGET), withOptions = false), settingsProtocol()?.version,
+                ) ?: return@runCatching
+                val write = SettingsCodec.calorieTargetFor(group, kcal) ?: return@runCatching
+                val ack = command(Endpoints.SETTINGS, write)
+                log(if (SettingsCodec.isWriteSuccess(ack)) "calorie goal sent: $kcal" else "calorie goal refused: ${ack.toHex()}")
+            }.onFailure { log("calorie goal send failed: $it") }
         }
     }
 

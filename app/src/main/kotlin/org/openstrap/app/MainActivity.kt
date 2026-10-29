@@ -857,7 +857,9 @@ private fun AppRoot(
             containerColor = MaterialTheme.colorScheme.background,
         ) { padding ->
             if (editGoals) {
-                org.openstrap.app.ui.device.GoalsSheet(goals, onSave = { g ->
+                // The calorie goal your last four weeks suggest, read as the sheet opens (calories spec 3.4).
+                val suggestedCalories by produceState<Int?>(null) { value = runCatching { container.health.suggestedCalorieGoal() }.getOrNull() }
+                org.openstrap.app.ui.device.GoalsSheet(goals, suggestedCalories = suggestedCalories, onSave = { g ->
                     scope.launch {
                         container.settings.saveGoals(g)
                         // The Steps widget's goal, and the evening sentence's on Moment (widgets spec 7).

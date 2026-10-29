@@ -69,6 +69,19 @@ class AlarmsAndSettingsTest {
     }
 
     @Test
+    fun calorieTarget() {
+        val g = SettingsCodec.parse(health)!!
+        assertEquals(300L, g[SettingsCodec.KEY_CALORIE_TARGET]!!.number)
+        // An i16 as reported: 05 group version 00 n key type value.
+        assertArrayEquals("0508030001530 1c201".replace(" ", "").hexToBytes(), SettingsCodec.calorieTargetFor(g, 450))
+        // Already set, or a group without the key: nothing to send.
+        assertEquals(null, SettingsCodec.calorieTargetFor(g, 300))
+        assertEquals(null, SettingsCodec.calorieTargetFor(SettingsGroup(8, 3, emptyMap()), 450))
+        assertArrayEquals("e8030000".hexToBytes(), SettingsCodec.intSetting(0x52, SettingsCodec.TYPE_I32, 1000)!!.raw)
+        assertEquals(null, SettingsCodec.intSetting(0x52, SettingsCodec.TYPE_BOOL, 1))
+    }
+
+    @Test
     fun settingsWrite() {
         val req = SettingsCodec.write(8, 3, listOf(SettingsCodec.enumSetting(SettingsCodec.KEY_HIGH_HR_ALERT, 120)))
         assertArrayEquals("05080300010210 78".replace(" ", "").hexToBytes(), req)
