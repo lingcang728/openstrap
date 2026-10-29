@@ -9,16 +9,22 @@ import java.util.zip.ZipOutputStream
 
 /**
  * Writes every table as a CSV file inside one zip ([CSV_TABLES]). Timestamps are ISO-8601 UTC plus raw epoch seconds.
- * [CsvImporter] reads the zip back.
+ * [settings], when given, goes in beside them as [SettingsBackup.FILE]. [CsvImporter] reads the zip back.
  */
 class CsvExporter(private val dao: HealthDao) {
 
-    suspend fun exportZip(out: OutputStream, from: Long = 0, to: Long = Long.MAX_VALUE / 2) {
+    suspend fun exportZip(out: OutputStream, from: Long = 0, to: Long = Long.MAX_VALUE / 2, settings: String? = null) {
         ZipOutputStream(out).use { zip ->
             val w = zip.writer()
             for (table in CSV_TABLES) {
                 zip.putNextEntry(ZipEntry(table.file))
                 w.writeCsv(table.header, table.rows(dao, from, to))
+                w.flush()
+                zip.closeEntry()
+            }
+            if (settings != null) {
+                zip.putNextEntry(ZipEntry(SettingsBackup.FILE))
+                w.write(settings)
                 w.flush()
                 zip.closeEntry()
             }

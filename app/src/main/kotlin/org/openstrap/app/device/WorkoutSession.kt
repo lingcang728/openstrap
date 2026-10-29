@@ -79,6 +79,8 @@ class WorkoutSession(
     private val strap: StrapController,
     /** A coaching buzz never plays while a call rings: a motor pattern cuts off the call's buzz (hardware test). */
     private val callRinging: () -> Boolean = { false },
+    /** A finished workout was saved or changed, by its start: auto sync writes it to Health Connect. Returns at once. */
+    private val onSaved: (start: Long) -> Unit = {},
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val lock = Mutex()
@@ -480,6 +482,7 @@ class WorkoutSession(
                 }
                 // The route is still in memory here, kept or not, so a run gets its VO2max either way.
                 dao.upsertAppWorkout(withEffect(ended, dao.appWorkoutHeartRateOnce(w.start), _route.value))
+                onSaved(w.start)
                 _state.value = WorkoutState.Ended(w.start)
                 watchCalmDown(w.start, recorded)
             }
@@ -552,6 +555,7 @@ class WorkoutSession(
                 val w = AppWorkout(start = from, end = to, sportType = sportType, source = AppWorkout.SOURCE_SUGGESTED, endReason = AppWorkout.END_USER)
                 dao.upsertAppWorkout(w)
                 WorkoutGapFill(dao) { settings.profile.first() }.fill(w)
+                onSaved(w.start)
             }
         }
     }
@@ -630,6 +634,7 @@ class WorkoutSession(
                 dao.upsertAppWorkout(withEffect(changed, dao.appWorkoutHeartRateOnce(start)))
                 // Its kcal moved, so its days' energy rows follow: over all it was recorded, which holds both ranges.
                 refreshDays(w.start, w.recordedEnd ?: w.end ?: start)
+                onSaved(start)
             }
         }
     }

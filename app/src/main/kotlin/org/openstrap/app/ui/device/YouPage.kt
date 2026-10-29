@@ -6,12 +6,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.openstrap.app.BuildConfig
+import org.openstrap.app.data.settings.BackupState
 import org.openstrap.app.data.settings.Goals
+import org.openstrap.app.data.settings.HealthConnectAuto
 import org.openstrap.app.data.settings.UserProfile
 import org.openstrap.app.ui.dashboard.ScreenList
 import org.openstrap.app.ui.glow.GlowLayout
@@ -32,6 +35,43 @@ fun sleepGoalLine(goals: Goals, needMinutes: Int): String =
     "${hoursMinutes(goals.sleepMinutes)}. Your sleep need is ${hoursMinutes(needMinutes)}"
 
 /**
+ * The auto sync row's value: on and when it last wrote ("On. Last synced 10:42", "yesterday 10:42", "12 Oct"), off,
+ * or stopped by itself and why. [now] in epoch seconds.
+ */
+fun healthConnectLine(auto: HealthConnectAuto, now: Long, zone: java.time.ZoneId, locale: java.util.Locale = java.util.Locale.getDefault()): String {
+    if (!auto.on) return when (auto.stopped) {
+        HealthConnectAuto.Stopped.PERMISSIONS -> "Stopped. Health Connect permissions were turned off"
+        HealthConnectAuto.Stopped.UNAVAILABLE -> "Stopped. Health Connect isn't available on this phone"
+        null -> "Off. Copies new data after each strap sync"
+    }
+    val last = auto.lastSynced ?: return "On. Copies new data after each strap sync"
+    val today = java.time.Instant.ofEpochSecond(now).atZone(zone).toLocalDate()
+    val day = java.time.Instant.ofEpochSecond(last).atZone(zone).toLocalDate()
+    val clock = org.openstrap.app.ui.dashboard.clockText(last, zone, locale = locale)
+    return "On. Last synced " + when (day) {
+        today -> clock
+        today.minusDays(1) -> "yesterday $clock"
+        else -> day.format(java.time.format.DateTimeFormatter.ofPattern("d MMM", locale))
+    }
+}
+
+/** The You page's Health Connect row: on and when it last wrote, off, or stopped and why, in a few words. */
+fun healthConnectSummary(auto: HealthConnectAuto, now: Long, zone: java.time.ZoneId, locale: java.util.Locale = java.util.Locale.getDefault()): String =
+    when {
+        auto.on && auto.lastSynced != null -> healthConnectLine(auto, now, zone, locale)
+        auto.on -> "On"
+        auto.stopped == HealthConnectAuto.Stopped.PERMISSIONS -> "Stopped. Permissions were turned off"
+        auto.stopped == HealthConnectAuto.Stopped.UNAVAILABLE -> "Stopped. Not available on this phone"
+        else -> "Off"
+    }
+
+/** A small heading over a panel of rows, so two panels never sit back to back. */
+@Composable
+internal fun PanelHeading(text: String) {
+    Text(text, color = Color.White.copy(alpha = 0.6f), style = GlowType.secondary, modifier = Modifier.padding(start = 18.dp, top = 4.dp))
+}
+
+/**
  * The You page (spec 3.4), from the avatar on any tab: who you are and what happens to your data, things visited
  * monthly. A page like the Strap page rather than a sheet, because most rows open pages of their own and Back from
  * those should come back here. Every row shows its current value under its name, with an icon on its left.
@@ -46,10 +86,12 @@ fun YouPage(
     contentPadding: PaddingValues,
     onProfile: () -> Unit,
     onGoals: () -> Unit,
-    onSaveCopy: () -> Unit,
-    onRestoreCopy: () -> Unit,
+    /** Auto sync to Health Connect, said on its row; the row opens the Health Connect page. */
+    healthConnectAuto: HealthConnectAuto,
     onHealthConnect: () -> Unit,
-    onRestoreHealthConnect: () -> Unit,
+    /** Automatic backup, said on its row; the row opens the Backup page. */
+    backup: BackupState,
+    onBackup: () -> Unit,
     onDiagnostics: () -> Unit,
     onSampleData: (() -> Unit)?,
     onBack: () -> Unit,
@@ -66,15 +108,20 @@ fun YouPage(
                 PageRow("Sleep goal", sleepGoalLine(goals, sleepNeedMinutes), onClick = onGoals, below = true, icon = AppIcons.Moon)
             }
         }
-        item { Text("Your data", color = Color.White.copy(alpha = 0.6f), style = GlowType.secondary, modifier = Modifier.padding(start = 18.dp, top = 4.dp)) }
+        item { PanelHeading("Your data") }
         item {
             PageRows {
-                PageRow("Save a copy", "A zip of every synced record, saved where you choose", onClick = onSaveCopy, below = true, divider = false, icon = AppIcons.DownloadSimple)
-                PageRow("Restore from a copy", "For days before the strap's history", onClick = onRestoreCopy, below = true, icon = AppIcons.UploadSimple)
-                PageRow("Health Connect", "Copy your data to Android Health Connect", onClick = onHealthConnect, below = true, icon = AppIcons.Heartbeat)
-                PageRow("Restore from Health Connect", "Bring back what OpenStrap saved there", onClick = onRestoreHealthConnect, below = true, icon = AppIcons.ArrowCounterClockwise)
+                // Read again whenever either changes, so "today" and "yesterday" follow the last one.
+                val now = remember(healthConnectAuto, backup) { System.currentTimeMillis() / 1000 }
+                val zone = java.time.ZoneId.systemDefault()
+                PageRow(
+                    "Health Connect", healthConnectSummary(healthConnectAuto, now, zone), onClick = onHealthConnect, below = true, divider = false,
+                    icon = AppIcons.Heartbeat, selected = selected == "Health Connect",
+                )
+                PageRow("Backup", BackupCopy.summary(backup, now, zone), onClick = onBackup, below = true, icon = AppIcons.ShieldCheck, selected = selected == "Backup")
             }
         }
+        item { PanelHeading("Help") }
         item {
             PageRows {
                 PageRow("Diagnostics", "$logLines lines, for bug reports", onClick = onDiagnostics, below = true, divider = false, icon = AppIcons.Bug, selected = selected == "Diagnostics")
