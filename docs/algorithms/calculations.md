@@ -645,7 +645,7 @@ EPOC ← EPOC + 0.077 × (e^(4.5x) − 1) × minutes
 
 **Anaerobic training effect** is not worked out ("—"). Zepp's comes from another network; heart rate alone lags short efforts too much for an open model to hold up.
 
-**Recovery time.** From aerobic TE, joined by straight lines: TE 1 → 6 h, 2 → 16 h, 3 → 28 h, 4 → 48 h, 5 → 72 h.
+**Recovery time.** From aerobic TE, joined by straight lines: TE 1 → 5 h, 2 → 10 h, 3 → 20 h, 4 → 40 h, 5 → 72 h. TE 2 sits by the strap's own 11 h for a walk at TE 2.1; the rest keeps the shape.
 
 * Up to 25 % longer when fatigue runs ahead of fitness: × (1 + 0.25 × (ATL − CTL) ÷ CTL), kept between ×1 and ×1.25, with CTL at least 5. Fitness and fatigue are section 8's 42/7-day model run over daily workout EPOC.
 * Never less than what an earlier workout (phone or strap) still has to run, as Zepp's own rule. Never more than 72 h.

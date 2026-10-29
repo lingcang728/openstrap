@@ -79,14 +79,16 @@ class WorkoutEffectTest {
         val minutes = listOf(5f, 15f, 40f, 80f, 120f, 180f).map { e -> WorkoutEffect.recoveryMinutes(WorkoutEffect.aerobicTe(e, 100, 50), null) }
         minutes.zipWithNext().forEach { (a, b) -> assertTrue("$minutes", b > a) }
         assertEquals(72 * 60, WorkoutEffect.recoveryMinutes(5f, null))
+        // Near the strap's own 11 h for a walk at aerobic TE 2.1.
+        assertEquals(11f * 60, WorkoutEffect.recoveryMinutes(2.1f, null).toFloat(), 30f)
     }
 
     @Test
     fun fatigueLengthensRecoveryAndLeftoverRecoveryCarries() {
         val fresh = WorkoutEffect.recoveryMinutes(3f, Recovery.LoadTrend(ctl = 20f, atl = 20f, form = 0f))
         val tired = WorkoutEffect.recoveryMinutes(3f, Recovery.LoadTrend(ctl = 20f, atl = 40f, form = 0f))
-        assertEquals(28 * 60, fresh)
-        assertEquals(35 * 60, tired)
+        assertEquals(20 * 60, fresh)
+        assertEquals(25 * 60, tired)
         assertEquals(40 * 60, WorkoutEffect.recoveryMinutes(1f, null, carriedMinutes = 40 * 60))
     }
 

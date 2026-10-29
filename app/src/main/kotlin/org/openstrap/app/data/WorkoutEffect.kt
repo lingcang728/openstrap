@@ -14,8 +14,8 @@ import kotlin.math.sqrt
  * HR-only model holds up for short efforts, where heart rate lags the work by tens of seconds.
  */
 object WorkoutEffect {
-    /** Raised when [epoc] changes, so saved workouts are worked out again once (StrapManager.updateEffectModel). */
-    const val MODEL = 2
+    /** Raised when [epoc] or recovery changes, so saved workouts are worked out again once (StrapManager.updateEffectModel). */
+    const val MODEL = 3
 
     /** Zepp works in 5-sample epochs of 1 Hz data, each read as its median HR (native 04 §3.1). */
     const val EPOCH_S = 5L
@@ -126,10 +126,11 @@ object WorkoutEffect {
     /* ------------------------------------------- Recovery time ------------------------------------------- */
 
     /**
-     * Hours to recover by aerobic TE, joined by straight lines. A design choice, not a fitted model: Zepp's own rule is
-     * switched off for app workouts (native 04 §6.2), so this keeps only its shape: rising with load and 72 h at TE 5.
+     * Hours to recover by aerobic TE, joined by straight lines. Zepp's own rule is switched off for app workouts
+     * (native 04 §6.2), so this keeps its shape, rising with load to 72 h at TE 5, anchored low on the strap's own:
+     * 11 h for a walk at aerobic TE 2.1. A design choice beyond that one point.
      */
-    private val RECOVERY_HOURS = listOf(0f to 0f, 1f to 6f, 2f to 16f, 3f to 28f, 4f to 48f, 5f to 72f)
+    private val RECOVERY_HOURS = listOf(0f to 0f, 1f to 5f, 2f to 10f, 3f to 20f, 4f to 40f, 5f to 72f)
     /** Never longer than Zepp's TE-5 value (native 04 §6.2); its 96 h needs an anaerobic TE we don't make. */
     const val MAX_RECOVERY_H = 72f
     /** At most this much longer when fatigue (ATL) runs ahead of fitness (CTL). */
