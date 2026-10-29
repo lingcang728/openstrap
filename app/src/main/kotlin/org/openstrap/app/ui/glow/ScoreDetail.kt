@@ -67,6 +67,8 @@ fun GlowScoreDetailScreen(
     paiHistory: PaiHistory? = null,
     onEditProfile: () -> Unit = {},
     energyHistory: EnergyHistory? = null,
+    /** For the Naps detail: keeps a nap's own times, the strap's nap first. */
+    onSetNapTimes: (org.openstrap.app.data.db.SleepSession, Long, Long) -> Unit = { _, _, _ -> },
 ) {
     val r = recovery?.takeIf { it.date == state.date }
     when (score) {
@@ -74,7 +76,7 @@ fun GlowScoreDetailScreen(
         Score.Charge -> ChargeDetail(state, r, history, onOpen, onSwitch, onSelectDay, contentPadding, onBack)
         Score.Sleep -> SleepScoreDetail(state, r, history, onOpen, onSwitch, onSelectDay, contentPadding, onBack)
         Score.Regularity -> RegularityDetail(state, r, history, onOpen, onSwitch, onSelectDay, contentPadding, onBack)
-        Score.Naps -> NapsDetail(state, r, onOpen, onSwitch, onSelectDay, contentPadding, onBack)
+        Score.Naps -> NapsDetail(state, r, onOpen, onSwitch, onSelectDay, contentPadding, onBack, onSetNapTimes)
         Score.HeartPoints, Score.ActiveMinutes, Score.Load, Score.Vo2Max, Score.Recover, Score.Energy, Score.Distance -> ActivityScoreDetail(
             score, ActivityDetailContext(state, r, workouts, paiHistory, history, onOpen, onSwitch, onSelectDay, onEditProfile, contentPadding, onBack, energyHistory),
         )

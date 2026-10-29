@@ -2,6 +2,7 @@ package org.openstrap.app.ui.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.stateIn
 import org.openstrap.app.data.DayWindow
 import org.openstrap.app.data.HealthRepository
 import org.openstrap.app.data.LiveSteps
+import org.openstrap.app.data.NapTimes
 import org.openstrap.app.data.SleepHistory
 import org.openstrap.app.data.Summaries
 import org.openstrap.app.data.db.HealthAlertRow
@@ -75,6 +77,8 @@ data class DayUiState(
     /** Each nap's stages and totals, keyed by the nap's start. */
     val napStages: Map<Long, List<StageSpan>> = emptyMap(),
     val napBreakdowns: Map<Long, Summaries.SleepBreakdown> = emptyMap(),
+    /** Each nap as the strap saw it, keyed by the nap's start as shown (the user's own when they changed its times). */
+    val napsAsDetected: Map<Long, SleepSession> = emptyMap(),
     val sleepStages: List<StageSpan> = emptyList(),
     val sleepBreakdown: Summaries.SleepBreakdown? = null,
     val spo2: List<ChartPoint> = emptyList(),
@@ -148,6 +152,11 @@ class DayViewModel(
 
     /** Works out the day's Recovery again, after it failed ([recoveryFailure]). */
     fun retryRecovery() { recoveryRetries.value++ }
+
+    /** Keeps [start] to [end] as the times of the strap's nap [strap]. */
+    fun setNapTimes(strap: SleepSession, start: Long, end: Long) {
+        viewModelScope.launch { repo.setNapTimes(strap, start, end) }
+    }
 
     /** The last Recovery worked out, for yesterday's score when today's fails. */
     @Volatile private var lastRecovery: RecoveryResult? = null
@@ -249,16 +258,24 @@ class DayViewModel(
         val vitals = combine(repo.spo2(day), repo.stress(day), repo.hrv(day)) { spo2, stress, hrv -> Triple(spo2, stress, hrv) }
         // Sessions ending from the start of the night into early tomorrow, so tonight's evening naps are included too.
         val nightBefore = DayWindow.nightEndingOn(date.minusDays(1))
-        val sleep = repo.sleepSessions(DayWindow(nightBefore.from, day.to + 12 * 3600)).flatMapLatest { sessions ->
+        val sessionsAndEdits = combine(repo.sleepSessions(DayWindow(nightBefore.from, day.to + 12 * 3600)), repo.napEdits()) { s, e -> s to e }
+        val sleep = sessionsAndEdits.flatMapLatest { (sessions, edits) ->
             // Main sleep = the longest non-nap session that ended in the night window.
             val main = SleepHistory.mainSleep(sessions, night)
             val before = SleepHistory.mainSleep(sessions, nightBefore)
             // Naps belong to the calendar day they started on, not the night window (which ends at 18:00).
-            val naps = sessions.filter { it.nap && it.start in day.from..day.to }
+            // The strap's start decides the day, so moving a nap's times never moves it to another day.
+            val detected = sessions.filter { it.nap && it.start in day.from..day.to }
+            val byStrapStart = edits.associateBy { it.strapStart }
+            val naps = detected.map { NapTimes.apply(it, byStrapStart) }
             val mainStages = if (main == null) flowOf(emptyList()) else repo.sleepStages(main.start)
+            // Stages stay under the strap's start; they're trimmed to the times shown.
             val napStages = if (naps.isEmpty()) flowOf(emptyMap())
-            else combine(naps.map { repo.sleepStages(it.start) }) { all -> naps.zip(all) { n, st -> n.start to st.toList() }.toMap() }
-            combine(mainStages, napStages) { st, ns -> SleepParts(main, st, naps, ns, before?.score) }
+            else combine(detected.map { repo.sleepStages(it.start) }) { all ->
+                naps.zip(all) { n, st -> n.start to NapTimes.clip(st.toList(), n.start, n.end) }.toMap()
+            }
+            val asDetected = naps.zip(detected) { n, d -> n.start to d }.toMap()
+            combine(mainStages, napStages) { st, ns -> SleepParts(main, st, naps, ns, before?.score, asDetected) }
         }
         val extras = combine(repo.skinTemperature(day), repo.breathRate(night), repo.latestPai(day.to)) { skin, breath, pai ->
             Triple(skin, breath, pai?.takeIf { it.timestamp >= day.from })
@@ -382,6 +399,7 @@ class DayViewModel(
                 naps = naps,
                 napStages = napStages.mapValues { (_, st) -> st.map { StageSpan(it.start, it.end, it.stage) } },
                 napBreakdowns = napStages.filterValues { it.isNotEmpty() }.mapValues { (_, st) -> Summaries.sleepBreakdown(st) },
+                napsAsDetected = sleepParts.napsAsDetected,
                 sleepStages = stages.map { StageSpan(it.start, it.end, it.stage) },
                 sleepBreakdown = if (stages.isEmpty()) null else Summaries.sleepBreakdown(stages),
                 spo2 = spo2.map { ChartPoint(it.timestamp, it.percent.toFloat()) },
@@ -428,6 +446,7 @@ private data class SleepParts(
     val naps: List<SleepSession>,
     val napStages: Map<Long, List<SleepStage>>,
     val previousScore: Int? = null,
+    val napsAsDetected: Map<Long, SleepSession> = emptyMap(),
 )
 
 private data class MoreParts(
