@@ -108,17 +108,41 @@ object Workouts {
         )
     }
 
+    /** How far before a phone workout's start the strap's record of it may begin. */
+    const val SAME_WORKOUT_SLACK_S = 120L
+
+    /** A phone workout's time as [sameWorkout] reads it: its shown start to its end, [now] while it records. */
+    fun phoneRange(p: org.openstrap.app.data.db.AppWorkout, now: Long): LongRange = p.from..(p.end ?: now)
+
+    /**
+     * Whether the strap workout over [strap] is the strap's own record of the phone workout over [phone], so the two
+     * are one workout: the strap auto-detects a walk minutes into it, and mirrors one started on the phone. It starts
+     * inside the phone's range (or up to [SAME_WORKOUT_SLACK_S] before it), or at least half of it lies inside, so
+     * one the strap noticed before you tapped Start merges too.
+     */
+    fun sameWorkout(strap: LongRange, phone: LongRange): Boolean {
+        if (strap.first in (phone.first - SAME_WORKOUT_SLACK_S)..phone.last) return true
+        val overlap = minOf(strap.last, phone.last) - maxOf(strap.first, phone.first)
+        return overlap > 0 && overlap * 2 >= strap.last - strap.first
+    }
+
+    /** The phone workout of [phone] that [w] is the strap's record of ([sameWorkout]), if any. */
+    fun phoneTwin(w: Workout, phone: List<org.openstrap.app.data.db.AppWorkout>, now: Long): org.openstrap.app.data.db.AppWorkout? =
+        phone.firstOrNull { sameWorkout(w.start..w.end, phoneRange(it, now)) }
+
     /**
      * The strap's workouts [ws] and the phone's [phone] as the workout lists show them, newest first: a strap workout's
      * end placed by its [last] HR sample or its effect, a phone strength workout with its count of finished [sets]
-     * (by start). Zones are left empty: the lists fill them in apart.
+     * (by start). A strap workout that is the strap's record of a phone one ([sameWorkout]) is left out, so a walk
+     * you started and the strap also noticed is one workout; its page still shows the strap's figures. Zones are
+     * left empty: the lists fill them in apart.
      */
     fun listed(
         ws: List<Workout>, effects: List<SportEffectRow>, last: List<WorkoutHeartRate>, phone: List<org.openstrap.app.data.db.AppWorkout>,
-        sets: Map<Long, Int>, maxHr: Int,
+        sets: Map<Long, Int>, maxHr: Int, now: Long = System.currentTimeMillis() / 1000,
     ): List<WorkoutAnalysis> {
         val lastByWorkout = last.associateBy { it.workoutStart }
-        val strap = ws.map { w -> analyse(w, listOfNotNull(lastByWorkout[w.start]), effects, maxHr) }
+        val strap = ws.filter { phoneTwin(it, phone, now) == null }.map { w -> analyse(w, listOfNotNull(lastByWorkout[w.start]), effects, maxHr) }
         return (strap + phone.map { WorkoutRecorder.analyse(it, emptyList(), maxHr).copy(sets = sets[it.start]) }).sortedByDescending { it.workout.start }
     }
 

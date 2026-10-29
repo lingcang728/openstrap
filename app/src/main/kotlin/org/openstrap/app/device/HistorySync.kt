@@ -347,7 +347,9 @@ class HistorySync(
                         val storedBefore = dao.workout(w.summary.trackId).first() != null
                         store(listOfNotNull(w.summary, w.detail))
                         val row = workoutRow(w.summary)
-                        if (Workouts.notifyAutoDetected(row, storedBefore, now)) runCatching { onAutoDetected(row) }.onFailure { log("auto-detect notification: $it") }
+                        // One you started on the phone over the same time is the same workout: nothing new to tell.
+                        val yours = Workouts.phoneTwin(row, dao.appWorkoutsOnce(row.start - Workouts.SAME_WORKOUT_SLACK_S, row.end), now) != null
+                        if (!yours && Workouts.notifyAutoDetected(row, storedBefore, now)) runCatching { onAutoDetected(row) }.onFailure { log("auto-detect notification: $it") }
                     } else {
                         log("history workout with impossible time ${w.summary.timestamp} dropped")
                     }

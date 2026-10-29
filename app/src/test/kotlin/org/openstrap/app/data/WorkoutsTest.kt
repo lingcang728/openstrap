@@ -117,4 +117,23 @@ class WorkoutsTest {
         assertEquals(108, strap.activeSeconds)
         assertEquals(97, strap.copy(fromPhone = true).activeSeconds)
     }
+
+    @Test
+    fun aStrapWorkoutInsideAPhoneOneIsTheSameWorkout() {
+        // As on 29 Oct: a walk started on the phone 21:36 to 23:31, the strap's auto-detected "Activity" 22:53 to 23:31.
+        val walk = org.openstrap.app.data.db.AppWorkout(start, start + 6892, 3)
+        val detected = Workout(start + 4638, start + 6876, 223, 2238, 277, 117, 140, 90, 1f, 0.1f, 16, null, null, subtype = 1)
+        assertEquals(walk, Workouts.phoneTwin(detected, listOf(walk), start + 9000))
+        val listed = Workouts.listed(listOf(detected), emptyList(), emptyList(), listOf(walk), emptyMap(), 190, now = start + 9000)
+        assertEquals(listOf(true), listed.map { it.fromPhone })
+        // Noticed a few minutes before Start, mostly inside: the same. Before Start by more, mostly outside: its own.
+        org.junit.Assert.assertTrue(Workouts.sameWorkout((start - 300)..(start + 1500), start..(start + 6892)))
+        org.junit.Assert.assertFalse(Workouts.sameWorkout((start - 3000)..(start + 600), start..(start + 6892)))
+        // Right after it ended: another workout.
+        org.junit.Assert.assertFalse(Workouts.sameWorkout((start + 6950)..(start + 9000), start..(start + 6892)))
+        // While the walk still records, its range runs to now.
+        org.junit.Assert.assertTrue(Workouts.sameWorkout((start + 4638)..(start + 6876), Workouts.phoneRange(walk.copy(end = null), start + 7000)))
+        // With no phone workout over it, the strap's is listed as before.
+        assertEquals(1, Workouts.listed(listOf(detected), emptyList(), emptyList(), emptyList(), emptyMap(), 190).size)
+    }
 }

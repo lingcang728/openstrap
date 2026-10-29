@@ -182,9 +182,10 @@ class WorkoutsViewModel(private val dao: HealthDao, private val profile: Flow<Us
                     runCatching { org.openstrap.app.data.WorkoutEffectEngine(dao).backfill(w, profile.first()) }
                 }
                 val a = WorkoutRecorder.analyse(w, hr, maxHr)
-                // Merged by time: a strap workout that started within two minutes of this one's shown range.
-                val strap = all.firstOrNull { !it.fromPhone && it.workout.start in (w.from - 120)..((w.end ?: a.end) + 120) }
-                    ?.let { s -> Workouts.analyse(s.workout, dao.workoutHeartRate(s.workout.start).first(), dao.sportEffects().first(), maxHr) }
+                // The strap's own record of this workout ([Workouts.sameWorkout]), which the lists leave out.
+                val strap = dao.workoutsOnce(w.from - Workouts.SAME_WORKOUT_SLACK_S, w.end ?: a.end)
+                    .firstOrNull { Workouts.sameWorkout(it.start..it.end, w.from..(w.end ?: a.end)) }
+                    ?.let { s -> Workouts.analyse(s, dao.workoutHeartRate(s.start).first(), dao.sportEffects().first(), maxHr) }
                 val route = routeRows.map { it.point }.filter { it.t in w.from..(w.end ?: Long.MAX_VALUE) }
                 PhoneSummary(
                     a, WorkoutRecorder.expand(hr), w.start, w.recordedEnd ?: w.end ?: a.end, w.endReason,
