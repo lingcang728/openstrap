@@ -134,7 +134,6 @@ import org.openstrap.app.ui.workout.SportIcons
 import org.openstrap.app.ui.workout.ZONE_COLORS
 import org.openstrap.app.ui.workout.LiveView
 import org.openstrap.app.ui.workout.SideFigure
-import org.openstrap.app.ui.workout.Sides
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import org.openstrap.app.ui.workout.WorkoutCopy
@@ -894,9 +893,6 @@ fun GlowWorkoutLiveScreen(
     liveView: Int? = null,
     onLiveView: (Int) -> Unit = {},
     kcal: WorkoutRecorder.Kcal? = null,
-    savedSides: Sides? = null,
-    sidesTapped: Boolean = true,
-    onSides: (Sides) -> Unit = {},
 ) {
     BackHandler(onBack = onMinimize)
     // Saved with the screen; [liveView] is the view from the last workout, loaded a moment after the screen opens.
@@ -965,28 +961,30 @@ fun GlowWorkoutLiveScreen(
             PageDots(pager.currentPage, LiveView.entries.size) { scope.launch { pager.animateScrollToPage(it) } }
         } else heartCard()
         if (r.strength) SetsPanel(r, color, onStartSet, { haptics.perform(HapticEvent.SetDone); onSetDone() }, onExtendRest)
-        // Centred between the card and the buttons: the moving time large in the middle, two smaller figures either
+        // Centred between the card and the buttons: the moving time large in the middle, the average and peak either
         // side (Oura's avg and max around the live number), labels under the numbers and thin rules between (WHOOP).
+        // kcal, the distance and the pace sit in a row under it, so every figure shows without a tap.
         Spacer(Modifier.weight(1f))
-        // Each side steps through the figures this workout has on a tap, remembered per sport (WorkoutCopy.sides).
-        val distance = r.workout.distanceMeters
-        val available = WorkoutCopy.sideFigures(kcal != null, distance != null, !r.workout.distanceFromSteps)
-        val sides = WorkoutCopy.sides(savedSides, available)
-        val tap = { left: Boolean -> onSides(WorkoutCopy.tapped(sides, left, available)) }
+        val figures = WorkoutCopy.liveFigures(WorkoutCopy.sideFigures(kcal != null, r.workout.distanceMeters != null, !r.workout.distanceFromSteps))
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), verticalAlignment = Alignment.Bottom) {
-            SideStat(sides.left, r, stats, kcal, route, Modifier.weight(1f)) { tap(true) }
+            SideStat(figures.sides[0], r, stats, kcal, route, Modifier.weight(1f))
             StatRule()
             LiveStat("Moving time", Modifier.weight(1.5f)) {
                 // Plain digits: the heart rate above is the one dot-matrix number on the screen.
                 Text(workoutClock(active), color = Color.White, style = LiveClock)
             }
             StatRule()
-            SideStat(sides.right, r, stats, kcal, route, Modifier.weight(1f)) { tap(false) }
+            SideStat(figures.sides[1], r, stats, kcal, route, Modifier.weight(1f))
         }
-        if (!sidesTapped) Text(
-            WorkoutCopy.SIDES_HINT, color = Color.White.copy(alpha = 0.45f), style = GlowType.secondary,
-            modifier = Modifier.fillMaxWidth().padding(top = 6.dp), textAlign = TextAlign.Center,
-        )
+        if (figures.below.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(top = 16.dp).height(IntrinsicSize.Min), verticalAlignment = Alignment.Bottom) {
+            // A figure alone sits in the middle third, under the moving time, rather than across the screen.
+            if (figures.below.size == 1) Spacer(Modifier.weight(1f))
+            figures.below.forEachIndexed { i, f ->
+                if (i > 0) StatRule()
+                SideStat(f, r, stats, kcal, route, Modifier.weight(1f))
+            }
+            if (figures.below.size == 1) Spacer(Modifier.weight(1f))
+        }
         // The splits live in the summary; here each kilometre gets a line for a few seconds.
         if (r.workout.useGps) KmSplitLine(route, WorkoutCopy.readings(history, recent), r.workout.pauseRanges)
         // Once Lap has been pressed: the lap under way and its own clock, so a press shows on screen too.
@@ -1303,13 +1301,13 @@ private fun LiveStat(label: String, modifier: Modifier, value: @Composable () ->
 }
 
 /**
- * One side figure of the live row, a button that shows the next one ([onTap]). "1.25" alone could be anything: the
- * distance's label carries the unit from a kilometre on. kcal is active kcal, in plain digits like the rest.
+ * One figure around the moving time. "1.25" alone could be anything: the distance's label carries the unit from a
+ * kilometre on. kcal is active kcal, in plain digits like the rest.
  */
 @Composable
 private fun SideStat(
     figure: SideFigure, r: WorkoutState.Recording, stats: WorkoutRecorder.Stats?, kcal: WorkoutRecorder.Kcal?,
-    route: List<Route.Point>, modifier: Modifier, onTap: () -> Unit,
+    route: List<Route.Point>, modifier: Modifier,
 ) {
     val distance = r.workout.distanceMeters
     val (label, value) = when (figure) {
@@ -1330,12 +1328,7 @@ private fun SideStat(
     val unit = if (figure == SideFigure.Distance && distance != null && distance >= 1000) " kilometres" else ""
     LiveStat(
         label,
-        modifier.clip(RoundedCornerShape(12.dp)).pressClickable(onTap, RoundedCornerShape(12.dp))
-            .semantics(mergeDescendants = true) {
-                role = Role.Button
-                contentDescription = "$spoken ${value?.let { it + unit } ?: "waiting"}"
-                onClick("Show another figure") { onTap(); true }
-            },
+        modifier.semantics(mergeDescendants = true) { contentDescription = "$spoken ${value?.let { it + unit } ?: "waiting"}" },
     ) { LiveValue(value) }
 }
 

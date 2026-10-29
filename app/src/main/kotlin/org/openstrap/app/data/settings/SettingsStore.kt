@@ -221,27 +221,6 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[workoutLiveViewKey] = view }
     }
 
-    private val workoutFiguresKey = stringPreferencesKey("workout_figures")
-    private val workoutFigureTappedKey = androidx.datastore.preferences.core.booleanPreferencesKey("workout_figure_tapped")
-
-    /**
-     * The live row's side figures chosen per sport type by tapping; sports never tapped aren't in
-     * it and take the defaults ([org.openstrap.app.ui.workout.WorkoutCopy.defaultSides]).
-     */
-    val workoutFigures: Flow<Map<Int, org.openstrap.app.ui.workout.Sides>> =
-        context.dataStore.data.map { org.openstrap.app.ui.workout.WorkoutCopy.parseSides(it[workoutFiguresKey]) }
-
-    /** Whether a side figure has ever been tapped: until then the row says it can be. */
-    val workoutFigureTapped: Flow<Boolean> = context.dataStore.data.map { it[workoutFigureTappedKey] == true }
-
-    suspend fun setWorkoutFigures(sport: Int, sides: org.openstrap.app.ui.workout.Sides) {
-        context.dataStore.edit {
-            val all = org.openstrap.app.ui.workout.WorkoutCopy.parseSides(it[workoutFiguresKey]) + (sport to sides)
-            it[workoutFiguresKey] = org.openstrap.app.ui.workout.WorkoutCopy.formatSides(all)
-            it[workoutFigureTappedKey] = true
-        }
-    }
-
     private val workoutSidesKey = stringPreferencesKey("workout_sides")
 
     /**

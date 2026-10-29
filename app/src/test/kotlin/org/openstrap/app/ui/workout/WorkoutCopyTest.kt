@@ -125,46 +125,15 @@ class WorkoutCopyTest {
     private val steps = WorkoutCopy.sideFigures(kcal = true, distance = true, gps = false)
     private val gps = WorkoutCopy.sideFigures(kcal = true, distance = true, gps = true)
 
-    @Test fun `each kind of workout opens on its own side figures`() {
-        assertEquals(listOf(SideFigure.Avg, SideFigure.Max, SideFigure.Kcal), indoor)
-        assertEquals(listOf(SideFigure.Avg, SideFigure.Max, SideFigure.Kcal, SideFigure.Distance), steps)
-        assertEquals(SideFigure.entries, gps)
-        assertEquals(Sides(SideFigure.Kcal, SideFigure.Avg), WorkoutCopy.sides(null, indoor))
-        assertEquals(Sides(SideFigure.Distance, SideFigure.Kcal), WorkoutCopy.sides(null, steps))
-        assertEquals(Sides(SideFigure.Distance, SideFigure.Pace), WorkoutCopy.sides(null, gps))
-        // Without a profile kcal isn't offered, and the row is the average and the peak as before.
-        val noKcal = WorkoutCopy.sideFigures(kcal = false, distance = false, gps = false)
-        assertEquals(Sides(SideFigure.Avg, SideFigure.Max), WorkoutCopy.sides(null, noKcal))
-        assertEquals(Sides(SideFigure.Distance, SideFigure.Avg), WorkoutCopy.sides(null, WorkoutCopy.sideFigures(kcal = false, distance = true, gps = false)))
-    }
-
-    @Test fun `a tap steps through what the workout has, skipping the far side`() {
-        // Indoor: kcal | Avg. The left goes on past Avg (the right's) to Max, then wraps to kcal.
-        var s = WorkoutCopy.sides(null, indoor)
-        s = WorkoutCopy.tapped(s, left = true, indoor)
-        assertEquals(Sides(SideFigure.Max, SideFigure.Avg), s)
-        s = WorkoutCopy.tapped(s, left = true, indoor)
-        assertEquals(Sides(SideFigure.Kcal, SideFigure.Avg), s)
-        // GPS: Distance | Pace. The right wraps from Pace to Avg, then Max, kcal, and past Distance back to Pace.
-        s = WorkoutCopy.sides(null, gps)
-        val rights = (1..4).map { s = WorkoutCopy.tapped(s, left = false, gps); s.right }
-        assertEquals(listOf(SideFigure.Avg, SideFigure.Max, SideFigure.Kcal, SideFigure.Pace), rights)
-        assertTrue(rights.none { it == SideFigure.Distance })
-    }
-
-    @Test fun `a saved choice holds where the workout has it`() {
-        val saved = Sides(SideFigure.Max, SideFigure.Pace)
-        assertEquals(saved, WorkoutCopy.sides(saved, gps))
-        // Indoor there's no pace: that side takes its default.
-        assertEquals(Sides(SideFigure.Max, SideFigure.Avg), WorkoutCopy.sides(saved, indoor))
-        // Distance chosen on the left, before there is one: the default left, kcal, and the right moves off it.
-        assertEquals(Sides(SideFigure.Kcal, SideFigure.Avg), WorkoutCopy.sides(Sides(SideFigure.Distance, SideFigure.Kcal), indoor))
-        // Kept per sport through the setting's text; broken parts are dropped.
-        val all = mapOf(8 to Sides(SideFigure.Kcal, SideFigure.Max), 1 to saved)
-        assertEquals("1=Max:Pace,8=Kcal:Max", WorkoutCopy.formatSides(all))
-        assertEquals(all, WorkoutCopy.parseSides(WorkoutCopy.formatSides(all)))
-        assertEquals(mapOf(8 to Sides(SideFigure.Kcal, SideFigure.Max)), WorkoutCopy.parseSides("8=Kcal:Max,2=Kcal:Kcal,3=Steps:Avg,x=Avg:Max,"))
-        assertEquals(emptyMap<Int, Sides>(), WorkoutCopy.parseSides(null))
+    @Test fun `every figure the workout has shows at once`() {
+        val heart = listOf(SideFigure.Avg, SideFigure.Max)
+        assertEquals(LiveFigures(heart, listOf(SideFigure.Kcal)), WorkoutCopy.liveFigures(indoor))
+        assertEquals(LiveFigures(heart, listOf(SideFigure.Kcal, SideFigure.Distance)), WorkoutCopy.liveFigures(steps))
+        assertEquals(LiveFigures(heart, listOf(SideFigure.Kcal, SideFigure.Distance, SideFigure.Pace)), WorkoutCopy.liveFigures(gps))
+        // Without a profile there's no kcal, and indoors nothing goes under the time.
+        assertEquals(LiveFigures(heart, emptyList()), WorkoutCopy.liveFigures(WorkoutCopy.sideFigures(kcal = false, distance = false, gps = false)))
+        // Every available figure shows exactly once.
+        for (a in listOf(indoor, steps, gps)) WorkoutCopy.liveFigures(a).let { assertEquals(a, it.sides + it.below) }
     }
 
     @Test fun `kcal reads as whole active kcal`() {
