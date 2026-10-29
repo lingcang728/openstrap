@@ -183,13 +183,15 @@ object WorkoutDetailCopy {
     /**
      * The (i) on the Load card: Load (EPOC), training effect on its 0 to 5 scales, time to recover, the heart rate drop
      * and VO2 max, each explained plainly with this workout's value and left out when it has none. [fromPhone] says who
-     * worked them out, and [effectFromStrap] that a phone workout's are the strap's own; [strap] are the strap's own
+     * worked them out, and [effectFromStrap] that a phone workout's are the strap's own; [ownRecoveryMinutes] is a phone
+     * workout's recovery before what earlier ones left ([SummaryCopy.carriedOver]); [strap] are the strap's own
      * records of a phone workout, by start, when it kept any and its figures aren't already the ones shown.
      */
     fun effectSheet(
         aerobic: Float?, anaerobic: Float?, load: Int?, usualLoad: Float?, recoveryMinutes: Int?,
         drop60: Int?, drop120: Int?, endBpm: Int?, meaningfulDrop: Boolean, vo2max: Float?,
         fromPhone: Boolean, strap: List<EffectFigures>, effectFromStrap: Boolean = false,
+        ownRecoveryMinutes: Int? = null, sportType: Int? = null,
     ): EffectSheet {
         val rows = listOfNotNull(
             load?.let { l ->
@@ -206,7 +208,8 @@ object WorkoutDetailCopy {
             } else null,
             SummaryCopy.recoverSpan(recoveryMinutes)?.let {
                 "Time to recover" to "How long until your body is ready for another hard workout, from the training effect " +
-                    "and how tired you've been lately. This workout: $it."
+                    "and how tired you've been lately. It never drops below what earlier workouts left. This workout: " +
+                    (SummaryCopy.carriedOver(recoveryMinutes, ownRecoveryMinutes, sportType) ?: it) + "."
             },
             drop60?.let { d ->
                 val value = if (meaningfulDrop) {

@@ -50,6 +50,7 @@ class WorkoutEffectEngine(private val dao: HealthDao) {
         val modelled = WorkoutRecorder.withKcal(w, kcal).copy(
             epoc = r.epoc, aerobicTrainingEffect = r.aerobicTe, recoveryMinutes = r.recoveryMinutes,
             vo2max = if (points == null) w.vo2max else r.vo2max, anaerobicTrainingEffect = null, effectFromStrap = false,
+            ownRecoveryMinutes = r.ownRecoveryMinutes,
         )
         return strapEffect(modelled) ?: modelled
     }
@@ -67,7 +68,7 @@ class WorkoutEffectEngine(private val dao: HealthDao) {
         val epoc = effect?.epoc ?: s.trainingLoad?.toFloat() ?: return null
         return w.copy(
             epoc = epoc, aerobicTrainingEffect = s.aerobicTrainingEffect, anaerobicTrainingEffect = s.anaerobicTrainingEffect,
-            recoveryMinutes = effect?.recoveryMinutes ?: w.recoveryMinutes, effectFromStrap = true,
+            recoveryMinutes = effect?.recoveryMinutes ?: w.recoveryMinutes, effectFromStrap = true, ownRecoveryMinutes = null,
         )
     }
 
@@ -80,7 +81,7 @@ class WorkoutEffectEngine(private val dao: HealthDao) {
             if (w.end == null) continue
             val s = strapEffect(w) ?: continue
             if (s == w) continue
-            dao.updateAppWorkoutEffect(w.start, s.epoc, s.aerobicTrainingEffect, s.recoveryMinutes, s.vo2max, s.anaerobicTrainingEffect, fromStrap = true)
+            dao.updateAppWorkoutEffect(w.start, s.epoc, s.aerobicTrainingEffect, s.recoveryMinutes, s.vo2max, s.anaerobicTrainingEffect, fromStrap = true, ownRecoveryMinutes = null)
         }
     }
 
@@ -117,7 +118,7 @@ class WorkoutEffectEngine(private val dao: HealthDao) {
             if (hr.isEmpty()) continue
             val e = runCatching { withEffect(w, hr, profile) }.getOrNull() ?: continue
             if (e.epoc == null) continue
-            dao.updateAppWorkoutEffect(w.start, e.epoc, e.aerobicTrainingEffect, e.recoveryMinutes, e.vo2max, e.anaerobicTrainingEffect, e.effectFromStrap)
+            dao.updateAppWorkoutEffect(w.start, e.epoc, e.aerobicTrainingEffect, e.recoveryMinutes, e.vo2max, e.anaerobicTrainingEffect, e.effectFromStrap, e.ownRecoveryMinutes)
             n++
         }
         return n
@@ -131,7 +132,7 @@ class WorkoutEffectEngine(private val dao: HealthDao) {
         val e = withEffect(w, hr, profile)
         // Nothing to save without a valid reading; writing anyway would only wake every reader of the table.
         if (e.epoc == null) return
-        dao.updateAppWorkoutEffect(w.start, e.epoc, e.aerobicTrainingEffect, e.recoveryMinutes, e.vo2max, e.anaerobicTrainingEffect, e.effectFromStrap)
+        dao.updateAppWorkoutEffect(w.start, e.epoc, e.aerobicTrainingEffect, e.recoveryMinutes, e.vo2max, e.anaerobicTrainingEffect, e.effectFromStrap, e.ownRecoveryMinutes)
     }
 
     /**

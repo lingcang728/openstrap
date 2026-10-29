@@ -210,6 +210,12 @@ data class AppWorkout(
      */
     @ColumnInfo(defaultValue = "0") val effectFromStrap: Boolean = false,
     /**
+     * This workout's own recovery time, before what earlier workouts left: [recoveryMinutes] is never less than that
+     * leftover, so after a long workout a short one shows the long one's. Null for the strap's figures and before
+     * version 23.
+     */
+    val ownRecoveryMinutes: Int? = null,
+    /**
      * kcal over the shown range less pauses, above rest and in all ([org.openstrap.app.data.EnergyExpenditure.workoutMinutes]).
      * Worked out when it ends and again on a trim or a gap fill; null without a profile, and on workouts from before
      * version 20 until the daily energy history fills them in.

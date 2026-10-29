@@ -15,7 +15,7 @@ import kotlin.math.sqrt
  */
 object WorkoutEffect {
     /** Raised when [epoc] or recovery changes, so saved workouts are worked out again once (StrapManager.updateEffectModel). */
-    const val MODEL = 3
+    const val MODEL = 4
 
     /** Zepp works in 5-sample epochs of 1 Hz data, each read as its median HR (native 04 §3.1). */
     const val EPOCH_S = 5L
@@ -282,7 +282,8 @@ object WorkoutEffect {
     /* ---------------------------------------------- Together ---------------------------------------------- */
 
     /** A workout's figures. [epoc] is null without heart rate; [vo2max] null outside a valid run. */
-    data class Result(val epoc: Float?, val aerobicTe: Float?, val recoveryMinutes: Int?, val vo2max: Float?)
+    /** [recoveryMinutes] counts what earlier workouts left; [ownRecoveryMinutes] is this workout's alone. */
+    data class Result(val epoc: Float?, val aerobicTe: Float?, val recoveryMinutes: Int?, val vo2max: Float?, val ownRecoveryMinutes: Int? = null)
 
     /**
      * Everything for one workout from [from] to [end]. [load28] is the 28 days' workout EPOC before it, [trend] the
@@ -296,6 +297,9 @@ object WorkoutEffect {
         if (eps.isEmpty()) return Result(null, null, null, null)
         val e = epoc(eps, restingHr, maxHr)
         val te = aerobicTe(e, eps.size, activityClass(load28))
-        return Result(e, te, recoveryMinutes(te, trend, carriedMinutes), vo2max(sportType, eps, route, pauses, restingHr, maxHr))
+        return Result(
+            e, te, recoveryMinutes(te, trend, carriedMinutes), vo2max(sportType, eps, route, pauses, restingHr, maxHr),
+            ownRecoveryMinutes = recoveryMinutes(te, trend),
+        )
     }
 }

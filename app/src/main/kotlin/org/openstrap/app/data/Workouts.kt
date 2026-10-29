@@ -31,6 +31,8 @@ data class WorkoutAnalysis(
     val recordedEnd: Long? = null,
     /** Recovery time in minutes: the strap's sport effect, or OpenStrap's own for a phone workout ([WorkoutEffect]). */
     val recoveryMinutes: Int? = effect?.recoveryMinutes,
+    /** A phone workout's own recovery time, before what earlier ones left ([org.openstrap.app.data.db.AppWorkout.ownRecoveryMinutes]). */
+    val ownRecoveryMinutes: Int? = null,
     /** A phone workout's metres, from GPS or estimated from steps ([distanceFromSteps]); the strap stores none. */
     val distanceMeters: Float? = null,
     val distanceFromSteps: Boolean = false,

@@ -163,6 +163,21 @@ class WorkoutDetailCopyTest {
         assertEquals("From the strap, which recorded this workout alongside the phone and worked these out itself.", s.rows.last().second)
     }
 
+    @Test fun `a short workout after a long one says its own recovery and what's left from earlier`() {
+        // A 6-minute walk 45 min after a long one: its own is 4 min, the long one left 16 h.
+        assertEquals("Time to recover 4 min from this walk, 16 h in all with what's left from earlier", SummaryCopy.timeToRecover(978, 4, 3))
+        assertEquals("Time to recover nothing from this walk, 16 h left from earlier", SummaryCopy.timeToRecover(978, 0, 3))
+        // Its own close to the total, or not known: the total alone.
+        assertEquals("Time to recover 17 h", SummaryCopy.timeToRecover(1022, 1000, 3))
+        assertEquals("Time to recover 17 h", SummaryCopy.timeToRecover(1022, null, 3))
+        val sheet = WorkoutDetailCopy.effectSheet(
+            aerobic = 0.1f, anaerobic = null, load = 1, usualLoad = null, recoveryMinutes = 978,
+            drop60 = null, drop120 = null, endBpm = null, meaningfulDrop = false, vo2max = null,
+            fromPhone = true, strap = emptyList(), ownRecoveryMinutes = 4, sportType = 3,
+        )
+        assertTrue(sheet.rows.first { it.first == "Time to recover" }.second.endsWith("This workout: 4 min from this walk, 16 h in all with what's left from earlier."))
+    }
+
     @Test fun `a long workout that held two strap records names both`() {
         val s = WorkoutDetailCopy.effectSheet(
             aerobic = null, anaerobic = null, load = 60, usualLoad = null, recoveryMinutes = null,

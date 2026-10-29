@@ -101,8 +101,30 @@ object SummaryCopy {
     /** The Load card's note, "From this run", or "this workout" where no short noun reads well. */
     fun loadTitle(sportType: Int): String = "From this ${sportNoun(sportType) ?: "workout"}"
 
-    /** "Time to recover 14 h", "Time to recover 40 min"; null without one. */
-    fun timeToRecover(minutes: Int?): String? = recoverSpan(minutes)?.let { "Time to recover $it" }
+    /**
+     * The Load card's recovery line, "Time to recover 14 h"; null without one. When what earlier workouts left runs an
+     * hour or more past this one's [own], it says both, so a short walk after a long one doesn't read as costing the
+     * long one's hours: "Time to recover 40 min from this walk, 16 h in all with what's left from earlier."
+     */
+    fun timeToRecover(minutes: Int?, own: Int? = null, sportType: Int? = null): String? {
+        val total = recoverSpan(minutes) ?: return null
+        return carriedOver(minutes, own, sportType)?.let { "Time to recover $it" } ?: "Time to recover $total"
+    }
+
+    /**
+     * "40 min from this walk, 16 h in all with what's left from earlier", or "nothing from this walk, 16 h left from
+     * earlier"; null when the leftover doesn't run an hour or more past [own], and the total alone says it.
+     */
+    fun carriedOver(minutes: Int?, own: Int?, sportType: Int?): String? {
+        if (minutes == null || own == null || minutes - own < CARRIED_SHOWN_MIN) return null
+        val total = recoverSpan(minutes) ?: return null
+        val noun = "this ${sportType?.let(::sportNoun) ?: "workout"}"
+        return recoverSpan(own)?.let { "$it from $noun, $total in all with what's left from earlier" }
+            ?: "nothing from $noun, $total left from earlier"
+    }
+
+    /** What earlier workouts left must run this far past a workout's own recovery before the line names both. */
+    private const val CARRIED_SHOWN_MIN = 60
 
     /** A time to recover on its own: "14 h", "40 min"; null without one. */
     fun recoverSpan(minutes: Int?): String? {

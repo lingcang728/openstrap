@@ -123,7 +123,7 @@ object WorkoutRecorder {
         return Workouts.analyse(toWorkout(w, now, stats(shown)), expand(shown).filter { it.timestamp in w.from..end }, emptyList(), maxHeartRate)
             .copy(
                 fromPhone = true, historyMinutes = shown.count { it.fromHistory }, historyRanges = historyRanges(shown),
-                shownStart = w.from, recordedEnd = w.recordedEnd, recoveryMinutes = w.recoveryMinutes,
+                shownStart = w.from, recordedEnd = w.recordedEnd, recoveryMinutes = w.recoveryMinutes, ownRecoveryMinutes = w.ownRecoveryMinutes,
                 distanceMeters = w.distanceMeters, distanceFromSteps = w.distanceFromSteps, activeKcal = w.activeKcal,
                 target = w.target, targetReachedSeconds = reachedSeconds(w, end),
             )

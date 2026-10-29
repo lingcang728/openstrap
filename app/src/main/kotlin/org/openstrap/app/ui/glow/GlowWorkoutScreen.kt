@@ -324,7 +324,7 @@ private fun EffectInfo(a: WorkoutAnalysis, usual: Float?, strap: List<WorkoutAna
                 from = Instant.ofEpochSecond(s.workout.start).atZone(ZoneId.systemDefault()).toLocalTime().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),
             )
         },
-        effectFromStrap = fromStrap,
+        effectFromStrap = fromStrap, ownRecoveryMinutes = a.ownRecoveryMinutes, sportType = w.sportType,
     )
     InfoSheet(sheet.info, MetricColors.load, sheet.here, sheet.hereLine, onDismiss, rows = sheet.rows)
 }

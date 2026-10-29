@@ -288,7 +288,7 @@ internal fun LoadCard(a: WorkoutAnalysis, usual: Float?, best: String?, drop: St
             load.toString(), null, SummaryCopy.loadLine(load, usual),
             if (edge != EdgeStatus.Usual) MetricColors.load else Color.White.copy(alpha = GlowType.SECONDARY_ALPHA),
         ) else EdgeValue(null, null, "Not enough heart rate to work out Load.", waiting = false)
-        SummaryCopy.timeToRecover(a.recoveryMinutes)?.let {
+        SummaryCopy.timeToRecover(a.recoveryMinutes, a.ownRecoveryMinutes, a.workout.sportType)?.let {
             Text(it, color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary, modifier = Modifier.padding(top = 4.dp))
         }
         drop?.let { Text(it, color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary, modifier = Modifier.padding(top = 4.dp)) }
