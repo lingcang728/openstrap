@@ -186,6 +186,10 @@ interface HealthDao {
         ownRecoveryMinutes: Int? = null,
     )
 
+    /** Only a workout's average and peak heart rate, for the strap's own record of it ([updateAppWorkoutEffect]). */
+    @Query("UPDATE app_workout SET averageHeartRate = :average, maxHeartRate = :max WHERE start = :start")
+    suspend fun updateAppWorkoutHeartRateStats(start: Long, average: Int?, max: Int?)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAppWorkoutHeartRate(samples: List<AppWorkoutHeartRate>)
 

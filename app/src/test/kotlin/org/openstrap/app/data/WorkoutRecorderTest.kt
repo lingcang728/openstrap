@@ -6,6 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openstrap.app.data.db.AppWorkout
 import org.openstrap.app.data.db.AppWorkoutHeartRate
+import org.openstrap.protocol.services.SportSession.State
 
 class WorkoutRecorderTest {
     /** On the minute, so minute arithmetic reads plainly. */
@@ -317,5 +318,62 @@ class WorkoutRecorderTest {
         // Trimmed to end before it was reached, or never reached: no time.
         assertNull(WorkoutRecorder.reachedSeconds(w.copy(end = start + 1500)))
         assertNull(WorkoutRecorder.reachedSeconds(w.copy(targetReachedAt = null)))
+    }
+    /* ------------------------------------- The strap's own record and session ------------------------------------- */
+
+    /** The strap's record of a HIIT session: it read 152 bpm on average where the live stream read 96. */
+    private val strapRecord = org.openstrap.app.data.db.Workout(
+        start, start + 1800, 49, 1800, 300, 152, 181, 88, 3.4f, 1.2f, 40, null, null, subtype = 6,
+    )
+
+    @Test
+    fun theStrapsRecordTakesOverEffectAndHeartRate() {
+        val phone = AppWorkout(start = start, end = start + 1800, sportType = 49, averageHeartRate = 96, maxHeartRate = 120, vo2max = 44f)
+        val effect = org.openstrap.app.data.db.SportEffectRow(start + 1800, 600, null, 52f, null, null, null, null, 191)
+        val w = WorkoutRecorder.withStrapRecord(phone, strapRecord, effect)!!
+        assertEquals(152, w.averageHeartRate)
+        assertEquals(181, w.maxHeartRate)
+        assertEquals(52f, w.epoc)
+        assertEquals(3.4f, w.aerobicTrainingEffect)
+        assertEquals(600, w.recoveryMinutes)
+        assertEquals(44f, w.vo2max)
+        assertTrue(w.effectFromStrap)
+        // The figures shown are the strap's, though the live readings say otherwise.
+        val live = (0 until 1800L step 1).map { AppWorkoutHeartRate(start, start + it, 96) }
+        val shown = WorkoutRecorder.toWorkout(w, start + 1800, WorkoutRecorder.stats(live))
+        assertEquals(152, shown.averageHeartRate)
+        assertEquals(181, shown.maxHeartRate)
+        // Without the strap's record, the live readings stand.
+        assertEquals(96, WorkoutRecorder.toWorkout(phone.copy(averageHeartRate = 140), start + 1800, WorkoutRecorder.stats(live)).averageHeartRate)
+    }
+
+    @Test
+    fun aStrapRecordWithoutHeartRateKeepsThePhones() {
+        val phone = AppWorkout(start = start, end = start + 1800, sportType = 49, averageHeartRate = 96, maxHeartRate = 120)
+        val w = WorkoutRecorder.withStrapRecord(phone, strapRecord.copy(averageHeartRate = null, maxHeartRate = null), null)!!
+        assertEquals(96, w.averageHeartRate)
+        assertEquals(120, w.maxHeartRate)
+        // EPOC from the summary's load when there's no sport effect; none at all leaves the model.
+        assertEquals(40f, w.epoc)
+        assertNull(WorkoutRecorder.withStrapRecord(phone, strapRecord.copy(trainingLoad = null), null))
+    }
+
+    @Test
+    fun theWorkoutFollowsTheStrapsOwnStateChanges() {
+        assertEquals(WorkoutRecorder.StrapAction.PAUSE, WorkoutRecorder.strapAction(State.PAUSE, paused = false))
+        assertNull(WorkoutRecorder.strapAction(State.PAUSE, paused = true))
+        assertEquals(WorkoutRecorder.StrapAction.RESUME, WorkoutRecorder.strapAction(State.RESUME, paused = true))
+        assertNull(WorkoutRecorder.strapAction(State.RESUME, paused = false))
+        assertEquals(WorkoutRecorder.StrapAction.END, WorkoutRecorder.strapAction(State.STOP, paused = false))
+        assertEquals(WorkoutRecorder.StrapAction.END, WorkoutRecorder.strapAction(State.STOP, paused = true))
+        // Zepp leaves these alone.
+        assertNull(WorkoutRecorder.strapAction(State.START, paused = false))
+        assertNull(WorkoutRecorder.strapAction(State.ABANDON, paused = false))
+    }
+
+    @Test
+    fun aWorkoutThatIsntKeptAbandonsTheStrapsSession() {
+        assertEquals(State.STOP, WorkoutRecorder.closingState(kept = true))
+        assertEquals(State.ABANDON, WorkoutRecorder.closingState(kept = false))
     }
 }

@@ -367,10 +367,13 @@ class WorkoutSession(
         return ((last.second - first.second) * 60 / (last.first - first.first)).toInt().coerceAtLeast(0)
     }
 
-    fun pause() = update { w ->
+    fun pause() = pauseFrom(toStrap = true)
+
+    /** [toStrap] false when the strap paused its session itself, so it isn't told again. */
+    private fun pauseFrom(toStrap: Boolean) = update { w ->
         if (w.pausedAt != null) w else {
             flush()
-            w.copy(pausedAt = now()).also { strapState(org.openstrap.protocol.services.SportSession.State.PAUSE, it) }
+            w.copy(pausedAt = now()).also { strapState(org.openstrap.protocol.services.SportSession.State.PAUSE, it, send = toStrap) }
         }
     }
 
@@ -382,9 +385,11 @@ class WorkoutSession(
     }
 
     /** A pause doesn't count as time in zone. */
-    fun resume() = update { w ->
+    fun resume() = resumeFrom(toStrap = true)
+
+    private fun resumeFrom(toStrap: Boolean) = update { w ->
         lastReading = null
-        (w.pausedAt?.let { w.withPause(it, now()) } ?: w).also { if (it != w) strapState(org.openstrap.protocol.services.SportSession.State.RESUME, it) }
+        (w.pausedAt?.let { w.withPause(it, now()) } ?: w).also { if (it != w) strapState(org.openstrap.protocol.services.SportSession.State.RESUME, it, send = toStrap) }
     }
 
     /* --------------------------- The strap's own session (experimental, 0x0019) --------------------------- */
@@ -400,11 +405,14 @@ class WorkoutSession(
     @Volatile private var strapSessions = false
     private var keepAlive: Job? = null
 
-    /** Tells the strap's sport module, when that's on; a failure is logged and the phone recording carries on. */
-    private fun strapState(state: org.openstrap.protocol.services.SportSession.State, w: AppWorkout) {
+    /**
+     * Tells the strap's sport module, when that's on; a failure is logged and the phone recording carries on. [send]
+     * false when the strap made the change itself: nothing goes out, but a pause still gets its keep-alive.
+     */
+    private fun strapState(state: org.openstrap.protocol.services.SportSession.State, w: AppWorkout, send: Boolean = true) {
         if (!strapSessions) return
         val elapsed = WorkoutRecorder.activeSeconds(w, now())
-        scope.launch {
+        if (send) scope.launch {
             runCatching { strap.sportSession(state, w.sportType, w.start, elapsed) }
                 .onFailure { (strap as? StrapManager)?.log("strap session $state not sent: ${it.message}") }
         }
@@ -418,9 +426,22 @@ class WorkoutSession(
         }
     }
 
-    /** The strap's pushes: "heart rate back to normal" asks the same question as [checkStopped]. */
+    /**
+     * The strap's pushes: a pause, resume or stop it made itself is followed ([WorkoutRecorder.strapAction]), and "heart
+     * rate back to normal" asks the same question as [checkStopped].
+     */
     private fun onStrapPush(p: org.openstrap.protocol.services.SportSession.Push) {
         val r = _state.value as? WorkoutState.Recording ?: return
+        if (p is org.openstrap.protocol.services.SportSession.Push.StateChanged) {
+            val action = WorkoutRecorder.strapAction(p.state, r.paused) ?: return
+            (strap as? StrapManager)?.log("strap session: the strap sent ${p.state}, workout follows")
+            when (action) {
+                WorkoutRecorder.StrapAction.PAUSE -> pauseFrom(toStrap = false)
+                WorkoutRecorder.StrapAction.RESUME -> resumeFrom(toStrap = false)
+                WorkoutRecorder.StrapAction.END -> finish(null, AppWorkout.END_USER, toStrap = false)
+            }
+            return
+        }
         if (p is org.openstrap.protocol.services.SportSession.Push.Status && p.status == org.openstrap.protocol.services.SportSession.STATUS_HR_NORMAL) {
             if (r.paused || !r.workout.askToEnd || r.endPrompt != null) return
             val at = WorkoutRecorder.lastActive(window, steps, restingHr, r.maxHeartRate)?.takeIf { it > r.workout.start } ?: now()
@@ -445,7 +466,8 @@ class WorkoutSession(
         if (r.endPrompt != null) _state.value = r.copy(endPrompt = null, inCar = false)
     }
 
-    private fun finish(at: Long?, reason: Int) {
+    /** [toStrap] false when the strap ended its session itself. */
+    private fun finish(at: Long?, reason: Int, toStrap: Boolean = true) {
         scope.launch {
             lock.withLock {
                 val r = _state.value as? WorkoutState.Recording ?: return@withLock
@@ -458,7 +480,8 @@ class WorkoutSession(
                 offerNotBefore = now()
                 val end = at?.coerceIn(w.start, recorded) ?: recorded
                 val ended = w.copy(end = end, pausedAt = null, endReason = reason, recordedEnd = recorded.takeIf { it > end })
-                strapState(org.openstrap.protocol.services.SportSession.State.STOP, w)
+                val kept = WorkoutRecorder.activeSeconds(ended, end) >= MIN_SAVED_S
+                strapState(WorkoutRecorder.closingState(kept), w, send = toStrap)
                 keepAlive?.cancel()
                 // A set or rest under way closes with the workout.
                 r.sets.lastOrNull()?.let { last ->
@@ -470,7 +493,7 @@ class WorkoutSession(
                 }?.let { dao.upsertSets(listOf(it)) }
                 stop(keepLive = true)
                 // Under a minute is a mis-tap or a test, not a workout: nothing is kept, and the app says so.
-                if (WorkoutRecorder.activeSeconds(ended, end) < MIN_SAVED_S) {
+                if (!kept) {
                     strap.setWorkoutActive(false)
                     dao.deleteAppWorkout(w.start)
                     _state.value = WorkoutState.Idle
@@ -493,11 +516,20 @@ class WorkoutSession(
         }
     }
 
-    /** Deletes a phone workout, and closes its summary if it is the one showing. */
+    /**
+     * Deletes a phone workout, and closes its summary if it is the one showing. The strap's own records of it
+     * ([Workouts.strapTwins]) go too, as they show as this one: left, they would come back as a workout of their own.
+     */
     fun discard(start: Long) {
         scope.launch {
             lock.withLock {
                 val w = dao.appWorkoutOnce(start)
+                if (w?.end != null) {
+                    val t = now()
+                    val range = org.openstrap.app.data.Workouts.phoneRange(w, t)
+                    org.openstrap.app.data.Workouts.strapTwins(dao.workoutsOnce(range.first, range.last), range)
+                        .forEach { dao.deleteStrapWorkout(it.start, t) }
+                }
                 dao.deleteAppWorkout(start)
                 if (w?.end != null) refreshDays(w.start, w.recordedEnd ?: w.end)
                 if ((_state.value as? WorkoutState.Ended)?.start == start) {

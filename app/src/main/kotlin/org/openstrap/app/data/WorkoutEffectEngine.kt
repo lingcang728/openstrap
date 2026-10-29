@@ -56,25 +56,20 @@ class WorkoutEffectEngine(private val dao: HealthDao) {
     }
 
     /**
-     * [w] with the strap's own effect figures, when the strap kept a record of nearly all of it ([Workouts.strapCovers]),
-     * as it does of a session it ran alongside: its EPOC as Load, both training effects and its recovery time, which
-     * come from Zepp's own models on the strap. Its VO2max stays the phone's. Null when it kept no such record, so the
-     * model's figures stand. The record only arrives with a sync after the workout, hence [takeStrapEffects].
+     * [w] with the strap's own figures ([WorkoutRecorder.withStrapRecord]), when the strap kept a record of nearly all
+     * of it ([Workouts.strapCovers]), as it does of a session it ran alongside; they come from Zepp's own models on the
+     * strap. Null when it kept no such record, so the model's figures stand. The record only arrives with a sync after
+     * the workout, hence [takeStrapEffects].
      */
     suspend fun strapEffect(w: AppWorkout): AppWorkout? {
         val end = w.end ?: return null
         val s = dao.workoutsOnce(w.from, end).firstOrNull { Workouts.strapCovers(it.start..it.end, w.from..end) } ?: return null
-        val effect = Workouts.effectOf(s, dao.sportEffectsOnce(s.start, s.start + Workouts.EFFECT_WINDOW_S))
-        val epoc = effect?.epoc ?: s.trainingLoad?.toFloat() ?: return null
-        return w.copy(
-            epoc = epoc, aerobicTrainingEffect = s.aerobicTrainingEffect, anaerobicTrainingEffect = s.anaerobicTrainingEffect,
-            recoveryMinutes = effect?.recoveryMinutes ?: w.recoveryMinutes, effectFromStrap = true, ownRecoveryMinutes = null,
-        )
+        return WorkoutRecorder.withStrapRecord(w, s, Workouts.effectOf(s, dao.sportEffectsOnce(s.start, s.start + Workouts.EFFECT_WINDOW_S)))
     }
 
     /**
      * After a sync: each phone workout that ended since [since] takes the strap's figures when the strap's record of it
-     * has come in ([strapEffect]). Only the effect columns are written, and only when they change.
+     * has come in ([strapEffect]). Only the effect and heart rate columns are written, and only when they change.
      */
     suspend fun takeStrapEffects(since: Long) {
         for (w in dao.appWorkoutsOnce(since, Long.MAX_VALUE)) {
@@ -82,6 +77,7 @@ class WorkoutEffectEngine(private val dao: HealthDao) {
             val s = strapEffect(w) ?: continue
             if (s == w) continue
             dao.updateAppWorkoutEffect(w.start, s.epoc, s.aerobicTrainingEffect, s.recoveryMinutes, s.vo2max, s.anaerobicTrainingEffect, fromStrap = true, ownRecoveryMinutes = null)
+            dao.updateAppWorkoutHeartRateStats(w.start, s.averageHeartRate, s.maxHeartRate)
         }
     }
 

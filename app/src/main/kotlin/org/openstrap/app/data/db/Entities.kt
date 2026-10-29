@@ -205,8 +205,9 @@ data class AppWorkout(
     /** Anaerobic training effect 0–5: only from the strap ([effectFromStrap]), as no open model makes one. */
     val anaerobicTrainingEffect: Float? = null,
     /**
-     * The effect figures are the strap's own, from a record it kept of nearly all of this workout
-     * ([org.openstrap.app.data.WorkoutEffectEngine.strapEffect]), rather than OpenStrap's model.
+     * The effect figures and [averageHeartRate] and [maxHeartRate] are the strap's own, from a record it kept of nearly
+     * all of this workout ([org.openstrap.app.data.WorkoutEffectEngine.strapEffect]), rather than OpenStrap's model and
+     * live readings.
      */
     @ColumnInfo(defaultValue = "0") val effectFromStrap: Boolean = false,
     /**

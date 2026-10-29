@@ -101,8 +101,9 @@ object WorkoutRecorder {
         sportType = w.sportType,
         exerciseSeconds = activeSeconds(w, now).toInt(),
         calories = w.totalKcal?.let { Math.round(it) },
-        averageHeartRate = stats?.average ?: w.averageHeartRate,
-        maxHeartRate = stats?.max ?: w.maxHeartRate,
+        // The strap's own record of the workout ([withStrapRecord]) stands over the phone's live readings.
+        averageHeartRate = (if (w.effectFromStrap) w.averageHeartRate else null) ?: stats?.average ?: w.averageHeartRate,
+        maxHeartRate = (if (w.effectFromStrap) w.maxHeartRate else null) ?: stats?.max ?: w.maxHeartRate,
         minHeartRate = stats?.min,
         aerobicTrainingEffect = w.aerobicTrainingEffect,
         // Only the strap's: no open model holds up for it from heart rate alone ([WorkoutEffect]).
@@ -143,6 +144,41 @@ object WorkoutRecorder {
     /** [w] with its stored average and peak worked out again over its shown range, for the lists. */
     fun withStats(w: AppWorkout, hr: List<AppWorkoutHeartRate>): AppWorkout =
         stats(shown(w, hr)).let { w.copy(averageHeartRate = it?.average, maxHeartRate = it?.max) }
+
+    /**
+     * [w] with the figures of [s], the strap's own record of nearly all of it ([Workouts.strapCovers]), and [effect], its
+     * sport effect: its EPOC as Load, both training effects, its recovery time, and its average and peak heart rate,
+     * which the strap measures in its own workout mode and the live stream can read low in hard, jerky efforts. Its
+     * VO2max stays the phone's. Null without an EPOC, so the model's figures stand.
+     */
+    fun withStrapRecord(w: AppWorkout, s: Workout, effect: org.openstrap.app.data.db.SportEffectRow?): AppWorkout? {
+        val epoc = effect?.epoc ?: s.trainingLoad?.toFloat() ?: return null
+        return w.copy(
+            epoc = epoc, aerobicTrainingEffect = s.aerobicTrainingEffect, anaerobicTrainingEffect = s.anaerobicTrainingEffect,
+            recoveryMinutes = effect?.recoveryMinutes ?: w.recoveryMinutes, effectFromStrap = true, ownRecoveryMinutes = null,
+            averageHeartRate = s.averageHeartRate ?: w.averageHeartRate, maxHeartRate = s.maxHeartRate ?: w.maxHeartRate,
+        )
+    }
+
+    /* ------------------------------------ The strap's own session (0x0019) ----------------------------------- */
+
+    /** What a recording workout does when the strap changes its session itself. */
+    enum class StrapAction { PAUSE, RESUME, END }
+
+    /**
+     * The answer to the strap changing its session's state itself, as Zepp's `uv60.i()` follows it: a pause or resume
+     * only when it changes something, a stop ends the workout. Zepp leaves a start or an abandon alone, and so does this.
+     */
+    fun strapAction(state: org.openstrap.protocol.services.SportSession.State, paused: Boolean): StrapAction? = when (state) {
+        org.openstrap.protocol.services.SportSession.State.PAUSE -> StrapAction.PAUSE.takeIf { !paused }
+        org.openstrap.protocol.services.SportSession.State.RESUME -> StrapAction.RESUME.takeIf { paused }
+        org.openstrap.protocol.services.SportSession.State.STOP -> StrapAction.END
+        else -> null
+    }
+
+    /** The state that closes the strap's session: STOP for a workout that is kept, ABANDON for one that isn't, so the strap drops its record. */
+    fun closingState(kept: Boolean) =
+        if (kept) org.openstrap.protocol.services.SportSession.State.STOP else org.openstrap.protocol.services.SportSession.State.ABANDON
 
     /* ---------------------------------------------- Energy --------------------------------------------- */
 
