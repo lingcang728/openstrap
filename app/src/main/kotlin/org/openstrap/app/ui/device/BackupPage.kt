@@ -14,9 +14,9 @@ import org.openstrap.app.ui.glow.PageRows
 import org.openstrap.app.ui.theme.AppIcons
 
 /**
- * The Backup page, from the You page: automatic backup first (the switch, with the last backup or why it failed under
- * it, then, while on, the folder, Back up now and Restore from a backup), then a copy saved by hand and restoring from
- * any zip. Turning backup on asks for the folder first ([onTurnOn]).
+ * The Backup page, from the You page, in one panel: automatic backup (the switch, with the last backup or why it failed
+ * under it, then, while on, the folder and Back up now), one Restore for any zip, and a copy saved by hand where the
+ * user chooses, which the keep-7 rule never clears. Turning backup on asks for the folder first ([onTurnOn]).
  */
 @Composable
 fun BackupPage(
@@ -29,7 +29,6 @@ fun BackupPage(
     onBackUpNow: () -> Unit,
     onRestore: () -> Unit,
     onSaveCopy: () -> Unit,
-    onRestoreFile: () -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
@@ -49,21 +48,15 @@ fun BackupPage(
                         "Back up now", if (backingUp) "Backing up" else "Saves today's zip in that folder",
                         onClick = onBackUpNow, below = true, enabled = !backingUp, icon = AppIcons.CloudArrowDown,
                     )
-                    PageRow("Restore from a backup", "Choose one of the zips in that folder", onClick = onRestore, below = true, icon = AppIcons.ArrowCounterClockwise)
                 }
-            }
-        }
-        item { PanelHeading("Copies you keep") }
-        item {
-            PageRows {
-                PageRow("Save a copy", "A zip of every synced record, saved where you choose", onClick = onSaveCopy, below = true, divider = false, icon = AppIcons.DownloadSimple)
-                PageRow("Restore from a file", "Any OpenStrap zip. Fills in what this phone is missing", onClick = onRestoreFile, below = true, icon = AppIcons.UploadSimple)
+                PageRow("Restore", "Any OpenStrap zip. Fills in what this phone is missing", onClick = onRestore, below = true, icon = AppIcons.ArrowCounterClockwise)
+                PageRow("Save a copy", "A zip saved where you choose, never cleared", onClick = onSaveCopy, below = true, icon = AppIcons.DownloadSimple)
             }
         }
     }
 }
 
-/** The file picker for Restore from a backup, opening on the backup folder (a tree URI) when there is one. */
+/** The file picker for Restore, opening on the backup folder (a tree URI) when there is one, else on Download. */
 class PickBackup : androidx.activity.result.contract.ActivityResultContract<android.net.Uri?, android.net.Uri?>() {
     override fun createIntent(context: android.content.Context, input: android.net.Uri?): android.content.Intent =
         android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT)
@@ -71,8 +64,9 @@ class PickBackup : androidx.activity.result.contract.ActivityResultContract<andr
             .setType("*/*")
             .putExtra(android.content.Intent.EXTRA_MIME_TYPES, arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
             .apply {
-                if (input != null) runCatching {
-                    android.provider.DocumentsContract.buildDocumentUriUsingTree(input, android.provider.DocumentsContract.getTreeDocumentId(input))
+                runCatching {
+                    if (input != null) android.provider.DocumentsContract.buildDocumentUriUsingTree(input, android.provider.DocumentsContract.getTreeDocumentId(input))
+                    else android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Download")
                 }.getOrNull()?.let { putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI, it) }
             }
 

@@ -709,10 +709,7 @@ private fun AppRoot(
             Toast.makeText(context, "Health Connect permissions were not granted.", Toast.LENGTH_LONG).show()
         } else if (auto) deviceVm.setAutoHealthConnect(true) else deviceVm.exportHealthConnect()
     }
-    val csvImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let(deviceVm::importCsv)
-    }
-    // Automatic backup: the folder picker (a cancel leaves it as it was) and Restore from a backup, opening on it.
+    // Automatic backup's folder picker (a cancel leaves it as it was), and Restore, opening on that folder or Download.
     val backupFolderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri?.let(deviceVm::chooseBackupFolder)
     }
@@ -1118,7 +1115,6 @@ private fun AppRoot(
                                         onBackUpNow = { deviceVm.backUpNow() },
                                         onRestore = { backupRestoreLauncher.launch(folder) },
                                         onSaveCopy = { csvLauncher.launch("openstrap-export.zip") },
-                                        onRestoreFile = { csvImportLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) },
                                         onBack = onBack,
                                     )
                                 }
