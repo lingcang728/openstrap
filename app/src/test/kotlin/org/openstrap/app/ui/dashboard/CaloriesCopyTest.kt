@@ -81,8 +81,8 @@ class CaloriesCopyTest {
         assertEquals("No walking outside workouts", CaloriesCopy.walkingLine(0))
     }
 
-    private fun d(day: Int, active: Float, total: Float = active + 1700f, workout: Float = 0f) =
-        LocalDate.of(2026, 10, day).let { it to CaloriesCopy.DayKcal(it, active, total, workout, partial = false) }
+    private fun d(day: Int, active: Float, total: Float = active + 1700f, workout: Float = 0f, partial: Boolean = false) =
+        LocalDate.of(2026, 10, day).let { it to CaloriesCopy.DayKcal(it, active, total, workout, partial) }
 
     @Test fun `a range averages its days, counts the goal days and compares with the range before`() {
         val rows = mapOf(
@@ -90,14 +90,15 @@ class CaloriesCopyTest {
             d(21, 500f, workout = 200f), d(22, 400f), d(23, 460f), d(24, 300f), d(25, 600f, workout = 300f), d(26, 440f), d(27, 120f),
         )
         val s = CaloriesCopy.summary(rows, LocalDate.of(2026, 10, 21), LocalDate.of(2026, 10, 27), 450, inProgress = LocalDate.of(2026, 10, 27))
-        // The day in progress is left out: six days, 2,700 kcal, 450 a day.
+        // The day in progress is out of the averages (six days, 450 a day) and, short of its goal, of the goal days,
+        // but in the total: 2,700 + 120.
         assertEquals(6, s.days)
         assertEquals(450, s.activeADay)
-        assertEquals(2700, s.activeTotal)
+        assertEquals(2820, s.activeTotal)
         assertEquals(2150, s.totalADay)
         assertEquals(3, s.goalMet)
         assertEquals(150, s.vsBefore)
-        assertEquals(19, s.workoutShare)
+        assertEquals(18, s.workoutShare)
         assertEquals(LocalDate.of(2026, 10, 25), s.busiest?.date)
         assertEquals("Goal met on 3 of 6 days", CaloriesCopy.goalDays(s))
         assertEquals("+150", CaloriesCopy.signed(150))
@@ -106,7 +107,7 @@ class CaloriesCopyTest {
         assertEquals("vs the 7 days before", CaloriesCopy.vsLabel(Range.Week))
         assertEquals("vs the year before", CaloriesCopy.vsLabel(Range.Year))
         assertEquals("active kcal a day, last 30 days", CaloriesCopy.rangeLabel(Range.Month))
-        assertEquals("Workouts made 19% of your active kcal, the rest came from walking and moving about.", CaloriesCopy.rangeSentence(s, Locale.UK))
+        assertEquals("Workouts made 18% of your active kcal, the rest came from walking and moving about.", CaloriesCopy.rangeSentence(s, Locale.UK))
     }
 
     @Test fun `a range without days before it has no change, and no days says nothing`() {
@@ -120,6 +121,21 @@ class CaloriesCopyTest {
         assertNull(none.activeADay)
         assertNull(CaloriesCopy.goalDays(none))
         assertNull(CaloriesCopy.rangeSentence(none))
+    }
+
+    @Test fun `today counts once it is the busiest or has met the goal, and a barely worn day stays out of the averages`() {
+        // As on the phone: Tue barely worn, Wed short of the goal, today past it with a walk.
+        val rows = mapOf(d(27, 41f, total = 762f, partial = true), d(28, 246f, total = 1958f), d(29, 667f, total = 2358f, workout = 455f))
+        val s = CaloriesCopy.summary(rows, LocalDate.of(2026, 10, 23), LocalDate.of(2026, 10, 29), 300, inProgress = LocalDate.of(2026, 10, 29))
+        assertEquals(246, s.activeADay)
+        assertEquals(1958, s.totalADay)
+        assertEquals(954, s.activeTotal)
+        assertEquals("Goal met on 1 of 2 days", CaloriesCopy.goalDays(s))
+        assertEquals(LocalDate.of(2026, 10, 29), s.busiest?.date)
+        assertEquals(48, s.workoutShare)
+        // Short of its goal so far, today isn't one of the goal days yet.
+        val morning = CaloriesCopy.summary(rows + d(29, 120f), LocalDate.of(2026, 10, 23), LocalDate.of(2026, 10, 29), 300, inProgress = LocalDate.of(2026, 10, 29))
+        assertEquals("Goal met on 0 of 1 day", CaloriesCopy.goalDays(morning))
     }
 
     @Test fun `a workout says its share of its day`() {

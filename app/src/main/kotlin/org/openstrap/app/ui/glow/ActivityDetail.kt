@@ -509,8 +509,9 @@ private fun RecoverDetail(ctx: ActivityDetailContext) {
  * Calories (calories spec 4.5): active kcal as the headline with the goal under it. Day has the hours split by where the
  * kcal came from, the total and your use at rest, and a row per workout, walking and everyday moving. Week, Month and
  * Year read each day's stored row ([EnergyHistory]): the active kcal a day, the goal days, day bars split into
- * workouts and the rest against the goal (weekly over a year), and the change against the range before. The day
- * under way is drawn but left out of a range's numbers. No profile: as before, the way to add one.
+ * workouts and the rest against the goal (weekly over a year), and the change against the range before. The averages
+ * read full days only; the total and the busiest day take today too ([CaloriesCopy.summary]). No profile: as before,
+ * the way to add one.
  */
 @Composable
 private fun CaloriesDetail(ctx: ActivityDetailContext) {

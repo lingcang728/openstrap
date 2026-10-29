@@ -193,9 +193,9 @@ class HealthRepository(private val dao: HealthDao) {
 
     /**
      * The calorie goal the last [org.openstrap.app.data.settings.CalorieGoal.DAYS] suggest: from the active kcal of
-     * their full days, today left out ([org.openstrap.app.data.settings.CalorieGoal.suggested]).
+     * their full days, today left out ([org.openstrap.app.data.settings.CalorieGoal.suggested]). Null under a week of them.
      */
-    suspend fun suggestedCalorieGoal(today: LocalDate = LocalDate.now(), zone: ZoneId = ZoneId.systemDefault()): Int {
+    suspend fun suggestedCalorieGoal(today: LocalDate = LocalDate.now(), zone: ZoneId = ZoneId.systemDefault()): Int? {
         val days = org.openstrap.app.data.settings.CalorieGoal.DAYS.toLong()
         val rows = dao.dailyEnergyOnce(DayWindow.of(today.minusDays(days), zone).from, DayWindow.of(today.minusDays(1), zone).from)
         return org.openstrap.app.data.settings.CalorieGoal.suggested(rows.filter { !it.partial }.map { it.activeKcal })

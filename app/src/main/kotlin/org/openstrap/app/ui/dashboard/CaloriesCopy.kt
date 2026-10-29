@@ -93,8 +93,9 @@ internal object CaloriesCopy {
 
     /** A range's numbers: per day averages, the goal days, the active total and the change against the range before. */
     data class RangeSummary(
-        /** Days counted: those with a row, the day in progress left out. */
+        /** The goal's days: the full days, and today or a barely worn day only once its goal is met. */
         val days: Int,
+        /** Active a day, over the full days: a day under way or barely worn would drag it down. */
         val activeADay: Int?,
         val goalMet: Int,
         val activeTotal: Int,
@@ -107,27 +108,33 @@ internal object CaloriesCopy {
     )
 
     /**
-     * The days from [start] to [end] of [rows], against the same number of days before [start]. A day [inProgress]
-     * (today, so far) is drawn but left out of every number, so a morning never drags the averages down.
+     * The days from [start] to [end] of [rows], against the same number of days before [start]. The averages read only
+     * full days, so a day [inProgress] (today, so far) or one barely worn never drags them down. What is counted up
+     * (the total, the busiest day, the workouts' share) takes every day, today too, so it agrees with the bars. Today
+     * or a barely worn day joins the goal days once it has met the goal, never to count against it.
      */
     fun summary(rows: Map<LocalDate, DayKcal>, start: LocalDate, end: LocalDate, goal: Int, inProgress: LocalDate?): RangeSummary {
-        fun counted(from: LocalDate, to: LocalDate) = rows.values.filter { it.date in from..to && it.date != inProgress }
-        val now = counted(start, end)
+        fun inRange(from: LocalDate, to: LocalDate) = rows.values.filter { it.date in from..to }
+        fun full(days: List<DayKcal>) = days.filter { it.date != inProgress && !it.partial }
+        fun aDay(days: List<DayKcal>, of: (DayKcal) -> Float) = if (days.isEmpty()) null else Math.round(days.sumOf { of(it).toDouble() } / days.size).toInt()
+        val all = inRange(start, end)
         val length = java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1
-        val before = counted(start.minusDays(length), start.minusDays(1))
-        val active = now.sumOf { it.active.toDouble() }
-        val workout = now.sumOf { it.workout.toDouble() }
-        val aDay = if (now.isEmpty()) null else Math.round(active / now.size).toInt()
-        val beforeADay = if (before.isEmpty()) null else Math.round(before.sumOf { it.active.toDouble() } / before.size).toInt()
+        val now = full(all)
+        val before = full(inRange(start.minusDays(length), start.minusDays(1)))
+        val goalDays = all.filter { it in now || Math.round(it.active) >= goal }
+        val active = all.sumOf { it.active.toDouble() }
+        val workout = all.sumOf { it.workout.toDouble() }
+        val activeADay = aDay(now) { it.active }
+        val beforeADay = aDay(before) { it.active }
         return RangeSummary(
-            days = now.size,
-            activeADay = aDay,
-            goalMet = now.count { Math.round(it.active) >= goal },
+            days = goalDays.size,
+            activeADay = activeADay,
+            goalMet = goalDays.count { Math.round(it.active) >= goal },
             activeTotal = Math.round(active).toInt(),
-            totalADay = if (now.isEmpty()) null else Math.round(now.sumOf { it.total.toDouble() } / now.size).toInt(),
-            vsBefore = if (aDay != null && beforeADay != null) aDay - beforeADay else null,
+            totalADay = aDay(now) { it.total },
+            vsBefore = if (activeADay != null && beforeADay != null) activeADay - beforeADay else null,
             workoutShare = if (active > 0) Math.round(workout / active * 100).toInt() else null,
-            busiest = now.maxByOrNull { it.active },
+            busiest = all.maxByOrNull { it.active },
         )
     }
 

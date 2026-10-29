@@ -48,7 +48,7 @@ import org.openstrap.app.ui.theme.MetricColors
 /**
  * Steps, calories, sleep and active hours to aim for each day, in a sheet over the You page (spec 3.4, calories spec
  * 4.6). Every goal ring and "goal met" uses these, and the calorie goal goes to the strap. [suggestedCalories] is the
- * calorie goal your last four weeks suggest ([CalorieGoal.suggested]), null while it loads. Cancel, or pulling the
+ * calorie goal your last four weeks suggest ([CalorieGoal.suggested]), null while it loads or under a week of full days. Cancel, or pulling the
  * sheet down, leaves them as they were.
  */
 @Composable
@@ -97,9 +97,12 @@ private fun CalorieGoalField(value: Int, onChange: (Int) -> Unit, suggested: Int
     var text by remember { mutableStateOf("") }
     var refused by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
+    // The field reports "not focused" as soon as it's placed; only losing the focus it had commits.
+    var focused by remember { mutableStateOf(false) }
     fun commit() {
         if (!typing) return
         typing = false
+        focused = false
         val typed = CalorieGoal.parse(text)
         refused = typed == null
         if (typed != null) onChange(typed)
@@ -116,7 +119,7 @@ private fun CalorieGoalField(value: Int, onChange: (Int) -> Unit, suggested: Int
                 if (typing) {
                     BasicTextField(
                         text, { t -> text = t.filter { it.isDigit() }.take(4) },
-                        Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { if (!it.isFocused) commit() },
+                        Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { if (it.isFocused) focused = true else if (focused) commit() },
                         textStyle = GlowType.body.copy(color = Color.White, textAlign = TextAlign.Center), singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { commit() }),

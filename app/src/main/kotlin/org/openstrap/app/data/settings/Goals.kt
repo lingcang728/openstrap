@@ -42,7 +42,7 @@ object CalorieGoal {
     /** Said under the field when a typed value is outside [Goals.CALORIES]. */
     const val OUT_OF_RANGE = "Pick a number from 200 to 3,000"
 
-    /** Fewer full days than this and the suggestion is [Goals.DEFAULT_CALORIES]. */
+    /** Fewer full days than this and there is no suggestion: a few days say nothing about your usual. */
     const val MIN_FULL_DAYS = 7
 
     /** Full days the suggestion reads, the last four weeks. */
@@ -56,10 +56,11 @@ object CalorieGoal {
 
     /**
      * The goal suggested from [fullDays], the active kcal of the full days in the last [DAYS]: their median plus 10 %,
-     * rounded to 10, held in [Goals.CALORIES]. Under [MIN_FULL_DAYS] it's [Goals.DEFAULT_CALORIES], as Zepp's.
+     * rounded to 10, held in [Goals.CALORIES]. Null under [MIN_FULL_DAYS], so the sheet never says "from your last
+     * 4 weeks" over two days.
      */
-    fun suggested(fullDays: List<Float>): Int {
-        if (fullDays.size < MIN_FULL_DAYS) return Goals.DEFAULT_CALORIES
+    fun suggested(fullDays: List<Float>): Int? {
+        if (fullDays.size < MIN_FULL_DAYS) return null
         val sorted = fullDays.sorted()
         val n = sorted.size
         val median = if (n % 2 == 1) sorted[n / 2] else (sorted[n / 2 - 1] + sorted[n / 2]) / 2f

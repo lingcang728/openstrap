@@ -36,9 +36,9 @@ class CalorieGoalTest {
         assertEquals(3000, CalorieGoal.suggested(List(10) { 4000f }))
     }
 
-    @Test fun `under a week of full days suggests Zepp's 300`() {
-        assertEquals(300, CalorieGoal.suggested(emptyList()))
-        assertEquals(300, CalorieGoal.suggested(List(6) { 900f }))
+    @Test fun `under a week of full days suggests nothing`() {
+        assertNull(CalorieGoal.suggested(emptyList()))
+        assertNull(CalorieGoal.suggested(List(6) { 900f }))
         assertEquals(990, CalorieGoal.suggested(List(7) { 900f }))
     }
 
