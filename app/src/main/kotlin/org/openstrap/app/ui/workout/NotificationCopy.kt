@@ -9,9 +9,10 @@ import org.openstrap.app.ui.glow.km
 
 /**
  * What the ongoing workout notification shows (spec 6.3, patterns D4): the black card with the time, bpm in the zone
- * colour, one more figure and the flat zone strip. Three numbers at most: the time, the bpm, and distance for a GPS
- * workout or the target or the time in this zone otherwise. Collapsed it's the sport, the time and the bpm. Each part
- * is its own text element, so nothing here joins them with a separator.
+ * colour, one more figure and the flat zone strip: the time, the bpm, and distance for a GPS workout or the target or
+ * the time in this zone otherwise, with the active kcal after the time where it fits. Collapsed it's the sport, the
+ * time, the kcal where it fits and the bpm. Each part is its own text element, so nothing here joins them with a
+ * separator.
  */
 data class WorkoutCard(
     val sport: String,
@@ -29,6 +30,11 @@ data class WorkoutCard(
     val detail: String?,
     /** Seconds in each zone, for the strip. */
     val zoneSeconds: List<Int>,
+    /** "312 kcal", active, after the time; null without a profile. */
+    val kcal: String? = null,
+    /** Whether [kcal] fits the collapsed line, and the expanded card's time row ([NotificationCopy.kcalFits]). */
+    val kcalCollapsed: Boolean = false,
+    val kcalExpanded: Boolean = false,
 ) {
     /** The card as one line, for a Live Update's text: "152 bpm. Zone 3, tempo. 2.40 km". */
     val text: String get() = listOfNotNull(bpm, zoneLine, detail).joinToString(". ")
@@ -49,6 +55,7 @@ object NotificationCopy {
     fun card(
         sport: String, activeSeconds: Long, paused: Boolean, connected: Boolean, bpm: Int?, maxHr: Int, gps: Boolean,
         distanceMeters: Float?, distanceFromSteps: Boolean, target: WorkoutTarget?, zoneSeconds: List<Int>, confirming: Boolean,
+        activeKcal: Float? = null,
     ): WorkoutCard {
         val reading = bpm.takeIf { connected && !paused }
         val zone = WorkoutRecorder.liveZone(reading, maxHr)
@@ -75,8 +82,27 @@ object NotificationCopy {
             zone != null -> WorkoutCopy.zoneTime(zoneSeconds.getOrElse(zone) { 0 })
             else -> null
         }
-        return WorkoutCard(sport, activeSeconds, !paused, slot, zone, zoneLine, detail, zoneSeconds)
+        val kcal = WorkoutCopy.kcalText(activeKcal)
+        val clock = org.openstrap.app.ui.glow.workoutClock(activeSeconds)
+        return WorkoutCard(
+            sport, activeSeconds, !paused, slot, zone, zoneLine, detail, zoneSeconds,
+            kcal, kcal != null && kcalFits(sport, clock, kcal, slot, reading = zone != null, collapsed = true),
+            kcal != null && kcalFits(sport, clock, kcal, slot, reading = zone != null, collapsed = false),
+        )
     }
+
+    /**
+     * Whether [kcal] fits after the [clock] without cutting anything short, on a 360 dp phone, counted in characters
+     * of the line's widths. Collapsed, the sport, time, kcal and bpm share one 14 sp line: about [COLLAPSED_CHARS].
+     * Expanded, the time and the bpm [slot] are 30 sp (a word in it 20 sp) beside the kcal at 15 sp: about
+     * [EXPANDED_UNITS] of the kcal's characters, the large ones counting two.
+     */
+    fun kcalFits(sport: String, clock: String, kcal: String, slot: String, reading: Boolean, collapsed: Boolean): Boolean =
+        if (collapsed) sport.length + clock.length + kcal.length + slot.length <= COLLAPSED_CHARS
+        else 2 * clock.length + kcal.length + (if (reading) 2 * slot.length else (slot.length * 4 + 2) / 3) <= EXPANDED_UNITS
+
+    private const val COLLAPSED_CHARS = 32
+    private const val EXPANDED_UNITS = 34
 
     /** The colour of the bpm and the zone line: the zone's, or [MUTED]. */
     fun accent(zone: Int?): Int = (zone?.let { ZONE_COLORS.getOrNull(it) } ?: MUTED).toArgb()

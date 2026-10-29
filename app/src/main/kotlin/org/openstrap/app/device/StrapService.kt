@@ -302,7 +302,7 @@ class StrapService : LifecycleService() {
         val target = WorkoutTarget.parse(w.target)
         val card = NotificationCopy.card(
             Workouts.sportName(w.sportType), active, r.paused, connected, bpm, r.maxHeartRate, w.useGps, w.distanceMeters,
-            w.distanceFromSteps, target, session.zoneSeconds.value.toList(), confirming,
+            w.distanceFromSteps, target, session.zoneSeconds.value.toList(), confirming, session.kcal.value?.active,
         )
         val actions = WorkoutNotification.actions(r.paused, confirming, ::service)
         if (!liveUpdatesShown()) return WorkoutNotification.build(this, card, actions, openApp()).build()
@@ -343,6 +343,8 @@ class StrapService : LifecycleService() {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setRequestPromotedOngoing(true)
             .apply { if (r.paused) setShortCriticalText("Paused") }
+            // In the header, after the running time.
+            .setSubText(card.kcal)
             .setContentIntent(openApp())
             .setShowWhen(true)
             .setUsesChronometer(!r.paused)

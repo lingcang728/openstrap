@@ -20,6 +20,21 @@ enum class LiveView {
     }
 }
 
+/**
+ * The figures the live screen's row can show either side of the moving time, in the order a tap steps through them.
+ * Saved by name, so adding one later keeps the choices made.
+ */
+enum class SideFigure {
+    Avg, Max, Kcal, Distance, Pace;
+
+    companion object {
+        fun of(name: String?): SideFigure? = entries.firstOrNull { it.name == name }
+    }
+}
+
+/** The two side figures of the live row. */
+data class Sides(val left: SideFigure, val right: SideFigure)
+
 /** A finished kilometre on the live screen: which one ([index] from 0), when it ended, and its line. */
 data class SplitLine(val index: Int, val endT: Long, val text: String)
 
@@ -134,6 +149,77 @@ object WorkoutCopy {
 
     /** Whether going from zone [previous] to [current] ticks: a change between two readings, not the first one. */
     fun zoneTick(previous: Int?, current: Int?): Boolean = previous != null && current != null && previous != current
+
+    /* ------------------------------------------ Side figures ------------------------------------------ */
+
+    /**
+     * What this workout has to show either side of the moving time, in tap order: the average and peak always, kcal
+     * with a profile ([kcal]), the distance once there is one, and the pace only with GPS ([gps], not from steps).
+     */
+    fun sideFigures(kcal: Boolean, distance: Boolean, gps: Boolean): List<SideFigure> = SideFigure.entries.filter {
+        when (it) {
+            SideFigure.Avg, SideFigure.Max -> true
+            SideFigure.Kcal -> kcal
+            SideFigure.Distance -> distance
+            SideFigure.Pace -> distance && gps
+        }
+    }
+
+    /**
+     * The row's sides before any tap: kcal and Avg without a distance, the distance and kcal from steps,
+     * the distance and the pace with GPS. Without a profile kcal's place goes to Avg, or Max beside it.
+     */
+    fun defaultSides(available: List<SideFigure>): Sides {
+        val kcal = SideFigure.Kcal in available
+        return when {
+            SideFigure.Pace in available -> Sides(SideFigure.Distance, SideFigure.Pace)
+            SideFigure.Distance in available -> Sides(SideFigure.Distance, if (kcal) SideFigure.Kcal else SideFigure.Avg)
+            kcal -> Sides(SideFigure.Kcal, SideFigure.Avg)
+            else -> Sides(SideFigure.Avg, SideFigure.Max)
+        }
+    }
+
+    /**
+     * The sides shown: the ones [saved] for this sport where this workout has them, else the default for that side.
+     * The two are never the same figure: on a clash the left keeps its figure and the right moves on.
+     */
+    fun sides(saved: Sides?, available: List<SideFigure>): Sides {
+        val default = defaultSides(available)
+        val left = saved?.left?.takeIf { it in available } ?: default.left
+        val right = saved?.right?.takeIf { it in available } ?: default.right
+        return Sides(left, if (right == left) nextFigure(right, left, available) else right)
+    }
+
+    /** The figure after [current] in tap order among [available], wrapping round and skipping [other], the far side's. */
+    fun nextFigure(current: SideFigure, other: SideFigure, available: List<SideFigure>): SideFigure {
+        val order = SideFigure.entries.filter { it in available && it != other }
+        if (order.isEmpty()) return current
+        return order.firstOrNull { it.ordinal > current.ordinal } ?: order.first()
+    }
+
+    /** [sides] after a tap on the left ([left]) or the right figure. */
+    fun tapped(sides: Sides, left: Boolean, available: List<SideFigure>): Sides =
+        if (left) sides.copy(left = nextFigure(sides.left, sides.right, available))
+        else sides.copy(right = nextFigure(sides.right, sides.left, available))
+
+    /** The sides saved per sport type, "8=Kcal:Avg,1=Distance:Kcal"; unknown parts are dropped. */
+    fun parseSides(text: String?): Map<Int, Sides> = text.orEmpty().split(',').mapNotNull { part ->
+        val (k, v) = part.split('=').takeIf { it.size == 2 } ?: return@mapNotNull null
+        val sport = k.trim().toIntOrNull() ?: return@mapNotNull null
+        val (l, r) = v.split(':').takeIf { it.size == 2 } ?: return@mapNotNull null
+        val left = SideFigure.of(l.trim()) ?: return@mapNotNull null
+        val right = SideFigure.of(r.trim()) ?: return@mapNotNull null
+        if (left == right) null else sport to Sides(left, right)
+    }.toMap()
+
+    fun formatSides(sides: Map<Int, Sides>): String =
+        sides.entries.sortedBy { it.key }.joinToString(",") { "${it.key}=${it.value.left.name}:${it.value.right.name}" }
+
+    /** Under the row until the first tap on a side figure. */
+    const val SIDES_HINT = "Tap a figure to change it"
+
+    /** "312 kcal" for the notification and the capsule; null before there's a figure. */
+    fun kcalText(activeKcal: Float?): String? = activeKcal?.let { "${it.toInt()} kcal" }
 
     /**
      * How high the live heart card's light reaches for [zone] (spec 2.5): about a third of the card in zone 1, all of it

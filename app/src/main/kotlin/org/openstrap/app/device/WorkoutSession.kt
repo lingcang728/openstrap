@@ -105,6 +105,15 @@ class WorkoutSession(
     val zoneSeconds: StateFlow<IntArray> = _zoneSeconds
     private var lastReading: Pair<Long, Int>? = null
 
+    /**
+     * Active and total kcal so far ([WorkoutRecorder.liveKcalTick]), worked out every [KCAL_TICK_MS] from the readings
+     * and steps so far, pauses left out; it never goes down. Null without weight, height and age.
+     */
+    private val _kcal = MutableStateFlow<WorkoutRecorder.Kcal?>(null)
+    val kcal: StateFlow<WorkoutRecorder.Kcal?> = _kcal
+    /** The strap's step totals over the whole workout, for its steps a minute until a sync brings the strap's own. */
+    private var stepTotals = listOf<Pair<Long, Int>>()
+
     /** The heart rate coming down after the last workout ended, while [CALM_S] lasts; null before any. */
     private val _calmDown = MutableStateFlow<CalmDown?>(null)
     val calmDown: StateFlow<CalmDown?> = _calmDown
@@ -177,6 +186,8 @@ class WorkoutSession(
                     val maxHr = maxHeartRate()
                     _zoneSeconds.value = WorkoutRecorder.liveZoneSeconds(live, maxHr)
                     lastReading = live.lastOrNull()
+                    _kcal.value = null
+                    stepTotals = emptyList()
                     synchronized(allReadings) { allReadings.clear(); allReadings.addAll(live) }
                     _history.value = live
                     window = live.filter { it.first >= now - STOP_WINDOW_S }
@@ -225,6 +236,9 @@ class WorkoutSession(
                 count = 0
                 _zoneSeconds.value = IntArray(org.openstrap.app.data.Workouts.ZONES)
                 lastReading = null
+                _kcal.value = null
+                // Auto-start: the strap's total where the effort began, so the steps since count.
+                stepTotals = listOfNotNull(seedSteps?.let { w.start to it })
                 window = emptyList()
                 askSince = w.start
                 minimized.value = false
@@ -478,7 +492,9 @@ class WorkoutSession(
     fun discard(start: Long) {
         scope.launch {
             lock.withLock {
+                val w = dao.appWorkoutOnce(start)
                 dao.deleteAppWorkout(start)
+                if (w?.end != null) refreshDays(w.start, w.recordedEnd ?: w.end)
                 if ((_state.value as? WorkoutState.Ended)?.start == start) {
                     _state.value = WorkoutState.Idle
                     endCalmDown()
@@ -610,9 +626,18 @@ class WorkoutSession(
             lock.withLock {
                 val w = dao.appWorkoutOnce(start)?.takeIf { it.end != null } ?: return@withLock
                 val changed = change(w)
-                if (changed != w) dao.upsertAppWorkout(withEffect(changed, dao.appWorkoutHeartRateOnce(start)))
+                if (changed == w) return@withLock
+                dao.upsertAppWorkout(withEffect(changed, dao.appWorkoutHeartRateOnce(start)))
+                // Its kcal moved, so its days' energy rows follow: over all it was recorded, which holds both ranges.
+                refreshDays(w.start, w.recordedEnd ?: w.end ?: start)
             }
         }
+    }
+
+    /** Writes the daily energy rows from [from] to [to] again ([org.openstrap.app.data.DailyEnergyHistory.updateDays]). */
+    private suspend fun refreshDays(from: Long, to: Long) {
+        runCatching { org.openstrap.app.data.DailyEnergyHistory(dao).updateDays(from, to, settings.profile.first()) }
+            .onFailure { (strap as? StrapManager)?.log("daily energy not refreshed: ${it.message}") }
     }
 
     /**
@@ -739,9 +764,11 @@ class WorkoutSession(
                     s ?: return@collect
                     val t = now()
                     steps = (steps + (t to s.steps)).dropWhile { it.first < t - STOP_WINDOW_S }
+                    stepTotals = stepTotals + (t to s.steps)
                     if (firstSteps == null) firstSteps = s.steps
                 }
             }
+            launch { countKcal(w, maxHr) }
             // Strength rest is timed to the second, not to the flush.
             if (w.sportType in org.openstrap.app.data.Strength.SPORTS) launch {
                 while (isActive) {
@@ -757,6 +784,41 @@ class WorkoutSession(
                 _history.value = synchronized(allReadings) { allReadings.toList() }
                 if (++tick % STOP_CHECK_TICKS == 0) checkStopped()
             }
+        }
+    }
+
+    /**
+     * The live kcal, every [KCAL_TICK_MS] while [w] records. Resting HR and VO2max are read once, by the rules the saved
+     * workout's kcal uses ([org.openstrap.app.data.WorkoutEffectEngine]), so the figure at the end is about the one
+     * saved. Minutes a history fill wrote and the strap's own step minutes are read again every [KCAL_READ_TICKS].
+     */
+    private suspend fun countKcal(w: AppWorkout, maxHr: Int) {
+        val profile = runCatching { settings.profile.first() }.getOrNull() ?: return
+        if (org.openstrap.app.data.EnergyExpenditure.bmrPerMinute(profile, profile.age()) == null) return
+        val zone = java.time.ZoneId.systemDefault()
+        val date = java.time.Instant.ofEpochSecond(w.from).atZone(zone).toLocalDate()
+        val resting = runCatching { org.openstrap.app.data.WorkoutEffectEngine(dao).restingHr(w.from, zone) }.getOrDefault(DEFAULT_RESTING_HR.toFloat())
+        val vo2 = runCatching { RecoveryEngine(dao).vo2max(profile, date, zone) }.getOrNull()
+        var history = emptyList<AppWorkoutHeartRate>()
+        var synced = emptyMap<Long, Int>()
+        var tick = 0
+        while (true) {
+            val r = _state.value as? WorkoutState.Recording ?: return
+            if (r.workout.start != w.start) return
+            val t = now()
+            if (tick++ % KCAL_READ_TICKS == 0) {
+                history = runCatching { dao.appWorkoutHeartRateOnce(w.start).filter { it.fromHistory } }.getOrDefault(history)
+                synced = runCatching {
+                    dao.activityOnce(r.workout.from - 60, t + 60).filter { it.steps in 0..250 }.associate { it.timestamp / 60 * 60 to it.steps }
+                }.getOrDefault(synced)
+            }
+            val live = synchronized(allReadings) { allReadings.toList() }
+            _kcal.value = runCatching {
+                WorkoutRecorder.liveKcalTick(
+                    r.workout, live, history, stepTotals, synced, resting, maxHr.toFloat(), profile, profile.age(date), vo2, t, _kcal.value,
+                )
+            }.getOrDefault(_kcal.value)
+            delay(KCAL_TICK_MS)
         }
     }
 
@@ -866,6 +928,10 @@ class WorkoutSession(
 
     internal companion object {
         const val FLUSH_MS = 10_000L
+        /** The live kcal is worked out again this often. */
+        const val KCAL_TICK_MS = 5_000L
+        /** History minutes and the strap's step minutes are read again every sixth kcal tick, 30 s. */
+        const val KCAL_READ_TICKS = 6
         const val RECENT_S = 600L
         /** Workouts with less moving time than this aren't kept. */
         const val MIN_SAVED_S = 60L

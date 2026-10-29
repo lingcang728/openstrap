@@ -70,7 +70,7 @@ class WorkoutEffectEngine(private val dao: HealthDao) {
     }
 
     /** Daytime resting HR at [t]: the strap's daily values over [Recovery.RHR_DAYS], else [DEFAULT_RESTING_HR]. */
-    private suspend fun restingHr(t: Long, zone: ZoneId): Float = Recovery.daytimeRestingHr(
+    suspend fun restingHr(t: Long, zone: ZoneId = ZoneId.systemDefault()): Float = Recovery.daytimeRestingHr(
         dao.restingHrOnce(t - Recovery.RHR_DAYS * DAY, t).associate { it.day to it.bpm.toFloat() }, emptyMap(), dayStart(t, zone),
     ) ?: DEFAULT_RESTING_HR
 

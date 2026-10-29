@@ -38,17 +38,40 @@ class DailyEnergyHistory(private val dao: HealthDao) {
         val vo2 = HashMap<LocalDate, Float?>()
         var written = 0
         for (d in days) {
-            val from = DayWindow.of(d, zone).from
-            val restingHr = Recovery.daytimeRestingHr(
-                dao.restingHrOnce(from - Recovery.RHR_DAYS * 86_400L, from).associate { it.day to it.bpm.toFloat() }, emptyMap(), from,
-            ) ?: DEFAULT_RESTING_HR
             val monday = d.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
             val v = vo2.getOrPut(monday) { runCatching { engine.vo2max(profile, d, zone) }.getOrNull() }
-            val e = runCatching { engine.energy(d, profile, restingHr, maxHr, v, zone, now) }.getOrNull() ?: continue
-            dao.insertDailyEnergy(listOf(row(from, e, now)))
-            written++
+            if (write(engine, d, profile, maxHr, v, zone, now)) written++
         }
         return written
+    }
+
+    /**
+     * Writes the rows of the days from [from] to [to] (epoch seconds) again, for a phone workout edited, trimmed or
+     * deleted there: its kcal moved, and the day's must follow without waiting for a sync. The day shown rewrites its
+     * own anyway.
+     */
+    suspend fun updateDays(from: Long, to: Long, profile: UserProfile, zone: ZoneId = ZoneId.systemDefault(), now: Long = System.currentTimeMillis() / 1000) {
+        if (EnergyExpenditure.bmrPerMinute(profile, profile.age()) == null) return
+        val engine = RecoveryEngine(dao)
+        val first = Instant.ofEpochSecond(from).atZone(zone).toLocalDate()
+        val last = Instant.ofEpochSecond(maxOf(from, to)).atZone(zone).toLocalDate()
+        val maxHr = engine.maxHeartRate(profile, Instant.ofEpochSecond(now).atZone(zone).toLocalDate(), zone)
+        var d = first
+        while (d <= last) {
+            write(engine, d, profile, maxHr, runCatching { engine.vo2max(profile, d, zone) }.getOrNull(), zone, now)
+            d = d.plusDays(1)
+        }
+    }
+
+    /** Works out [d] on the resting HR of the days before it and writes its row; false when the model can't. */
+    private suspend fun write(engine: RecoveryEngine, d: LocalDate, profile: UserProfile, maxHr: Float, vo2max: Float?, zone: ZoneId, now: Long): Boolean {
+        val from = DayWindow.of(d, zone).from
+        val restingHr = Recovery.daytimeRestingHr(
+            dao.restingHrOnce(from - Recovery.RHR_DAYS * 86_400L, from).associate { it.day to it.bpm.toFloat() }, emptyMap(), from,
+        ) ?: DEFAULT_RESTING_HR
+        val e = runCatching { engine.energy(d, profile, restingHr, maxHr, vo2max, zone, now) }.getOrNull() ?: return false
+        dao.insertDailyEnergy(listOf(row(from, e, now)))
+        return true
     }
 
     companion object {

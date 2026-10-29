@@ -1267,6 +1267,10 @@ private fun androidx.compose.foundation.layout.BoxScope.WorkoutLayer(
     val session = container.workout
     // Read here, ahead of a workout, so the live screen usually opens on the right view at once.
     val liveView by container.settings.workoutLiveView.collectAsStateWithLifecycle(null)
+    val figures by container.settings.workoutFigures.collectAsStateWithLifecycle(emptyMap())
+    // True until read, so the hint never flashes for someone who has already tapped.
+    val figureTapped by container.settings.workoutFigureTapped.collectAsStateWithLifecycle(true)
+    val kcal by session.kcal.collectAsStateWithLifecycle()
     val viewScope = rememberCoroutineScope()
     val padding = androidx.compose.foundation.layout.WindowInsets.navigationBars.asPaddingValues()
     val full = androidx.compose.ui.Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
@@ -1294,6 +1298,8 @@ private fun androidx.compose.foundation.layout.BoxScope.WorkoutLayer(
                             onLap = session::lap,
                             split = tabletop || bookHinge != null,
                             liveView = liveView, onLiveView = { v -> viewScope.launch { container.settings.setWorkoutLiveView(v) } },
+                            kcal = kcal, savedSides = figures[state.workout.sportType], sidesTapped = figureTapped,
+                            onSides = { sides -> viewScope.launch { container.settings.setWorkoutFigures(state.workout.sportType, sides) } },
                         )
                     }
                 }
@@ -1312,7 +1318,7 @@ private fun androidx.compose.foundation.layout.BoxScope.WorkoutLayer(
             capsule = { place ->
                 org.openstrap.app.ui.glow.WorkoutCapsule(
                     state, live, connection is ConnectionState.Connected, onClick = { session.minimized.value = false },
-                    onPause = session::pause, onResume = session::resume, modifier = place,
+                    onPause = session::pause, onResume = session::resume, modifier = place, kcal = kcal,
                 )
             },
         )

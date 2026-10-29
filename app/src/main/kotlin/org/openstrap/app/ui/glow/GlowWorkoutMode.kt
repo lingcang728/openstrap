@@ -133,6 +133,10 @@ import org.openstrap.app.ui.theme.AppIcons
 import org.openstrap.app.ui.workout.SportIcons
 import org.openstrap.app.ui.workout.ZONE_COLORS
 import org.openstrap.app.ui.workout.LiveView
+import org.openstrap.app.ui.workout.SideFigure
+import org.openstrap.app.ui.workout.Sides
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import org.openstrap.app.ui.workout.WorkoutCopy
 import org.openstrap.app.ui.workout.SummaryCopy
 import java.time.Instant
@@ -884,6 +888,10 @@ fun GlowWorkoutLiveScreen(
     split: Boolean = false,
     liveView: Int? = null,
     onLiveView: (Int) -> Unit = {},
+    kcal: WorkoutRecorder.Kcal? = null,
+    savedSides: Sides? = null,
+    sidesTapped: Boolean = true,
+    onSides: (Sides) -> Unit = {},
 ) {
     BackHandler(onBack = onMinimize)
     // Saved with the screen; [liveView] is the view from the last workout, loaded a moment after the screen opens.
@@ -955,27 +963,25 @@ fun GlowWorkoutLiveScreen(
         // Centred between the card and the buttons: the moving time large in the middle, two smaller figures either
         // side (Oura's avg and max around the live number), labels under the numbers and thin rules between (WHOOP).
         Spacer(Modifier.weight(1f))
+        // Each side steps through the figures this workout has on a tap, remembered per sport (WorkoutCopy.sides).
+        val distance = r.workout.distanceMeters
+        val available = WorkoutCopy.sideFigures(kcal != null, distance != null, !r.workout.distanceFromSteps)
+        val sides = WorkoutCopy.sides(savedSides, available)
+        val tap = { left: Boolean -> onSides(WorkoutCopy.tapped(sides, left, available)) }
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), verticalAlignment = Alignment.Bottom) {
-            val distance = r.workout.distanceMeters
-            // With a distance it and the pace (GPS) take the sides; from steps, the distance and the average.
-            // "1.25" alone could be anything: the label carries the unit from a kilometre on.
-            val unit = if (distance != null && distance >= 1000) " km" else ""
-            when {
-                distance == null -> LiveStat("Avg", Modifier.weight(1f)) { LiveValue(stats?.average?.toString()) }
-                else -> LiveStat((if (r.workout.distanceFromSteps) "Distance ≈" else "Distance") + unit, Modifier.weight(1f)) { LiveValue(km(distance)) }
-            }
+            SideStat(sides.left, r, stats, kcal, route, Modifier.weight(1f)) { tap(true) }
             StatRule()
             LiveStat("Moving time", Modifier.weight(1.5f)) {
                 // Plain digits: the heart rate above is the one dot-matrix number on the screen.
                 Text(workoutClock(active), color = Color.White, style = LiveClock)
             }
             StatRule()
-            when {
-                distance != null && !r.workout.distanceFromSteps -> LiveStat("Pace /km", Modifier.weight(1f)) { LiveValue(Route.formatPace(Route.currentPace(route))) }
-                distance != null -> LiveStat("Avg", Modifier.weight(1f)) { LiveValue(stats?.average?.toString()) }
-                else -> LiveStat("Max", Modifier.weight(1f)) { LiveValue(stats?.max?.toString()) }
-            }
+            SideStat(sides.right, r, stats, kcal, route, Modifier.weight(1f)) { tap(false) }
         }
+        if (!sidesTapped) Text(
+            WorkoutCopy.SIDES_HINT, color = Color.White.copy(alpha = 0.45f), style = GlowType.secondary,
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp), textAlign = TextAlign.Center,
+        )
         // The splits live in the summary; here each kilometre gets a line for a few seconds.
         if (r.workout.useGps) KmSplitLine(route, WorkoutCopy.readings(history, recent), r.workout.pauseRanges)
         // Once Lap has been pressed: the lap under way and its own clock, so a press shows on screen too.
@@ -1287,6 +1293,43 @@ private fun LiveStat(label: String, modifier: Modifier, value: @Composable () ->
     }
 }
 
+/**
+ * One side figure of the live row, a button that shows the next one ([onTap]). "1.25" alone could be anything: the
+ * distance's label carries the unit from a kilometre on. kcal is active kcal, in plain digits like the rest.
+ */
+@Composable
+private fun SideStat(
+    figure: SideFigure, r: WorkoutState.Recording, stats: WorkoutRecorder.Stats?, kcal: WorkoutRecorder.Kcal?,
+    route: List<Route.Point>, modifier: Modifier, onTap: () -> Unit,
+) {
+    val distance = r.workout.distanceMeters
+    val (label, value) = when (figure) {
+        SideFigure.Avg -> "Avg" to stats?.average?.toString()
+        SideFigure.Max -> "Max" to stats?.max?.toString()
+        SideFigure.Kcal -> "kcal" to kcal?.active?.toInt()?.toString()
+        SideFigure.Distance -> (if (r.workout.distanceFromSteps) "Distance ≈" else "Distance") +
+            (if (distance != null && distance >= 1000) " km" else "") to distance?.let(::km)
+        SideFigure.Pace -> "Pace /km" to Route.formatPace(Route.currentPace(route))
+    }
+    val spoken = when (figure) {
+        SideFigure.Avg -> "Average heart rate"
+        SideFigure.Max -> "Peak heart rate"
+        SideFigure.Kcal -> "Active kcal"
+        SideFigure.Distance -> if (r.workout.distanceFromSteps) "Distance from steps" else "Distance"
+        SideFigure.Pace -> "Pace per kilometre"
+    }
+    val unit = if (figure == SideFigure.Distance && distance != null && distance >= 1000) " kilometres" else ""
+    LiveStat(
+        label,
+        modifier.clip(RoundedCornerShape(12.dp)).pressClickable(onTap, RoundedCornerShape(12.dp))
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                contentDescription = "$spoken ${value?.let { it + unit } ?: "waiting"}"
+                onClick("Show another figure") { onTap(); true }
+            },
+    ) { LiveValue(value) }
+}
+
 /** The thin rule between the live figures. */
 @Composable
 private fun StatRule() = Box(Modifier.padding(vertical = 6.dp).width(1.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.12f)))
@@ -1383,7 +1426,8 @@ private const val HOLD_MS = 1000
 
 /**
  * The workout tucked away: a bar above the tab bar ringed in the zone's colour, with a dot pulsing at the heart
- * rate, the sport and time, the zone, the bpm and Pause. Tap it to bring the live screen back.
+ * rate, the sport and time (and the active kcal after it when there's room), the zone, the bpm and Pause. Tap it to
+ * bring the live screen back.
  */
 @Composable
 fun WorkoutCapsule(
@@ -1394,6 +1438,7 @@ fun WorkoutCapsule(
     onPause: () -> Unit,
     onResume: () -> Unit,
     modifier: Modifier = Modifier,
+    kcal: WorkoutRecorder.Kcal? = null,
 ) {
     val bpm = liveHeartRate.takeIf { connected && !r.paused }
     val zone = WorkoutRecorder.liveZone(bpm, r.maxHeartRate)
@@ -1409,7 +1454,12 @@ fun WorkoutCapsule(
         PulseDot(color, bpm, 12.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text("${Workouts.sportName(r.workout.sportType)}, ${workoutClock(active)}", color = Color.White, style = MediumBody, maxLines = 1)
+            AfterIfRoom(
+                { Text("${Workouts.sportName(r.workout.sportType)}, ${workoutClock(active)}", color = Color.White, style = MediumBody, maxLines = 1) },
+                WorkoutCopy.kcalText(kcal?.active)?.let { k ->
+                    { Text(k, color = Color.White.copy(alpha = 0.6f), style = MediumBody.copy(fontFeatureSettings = "tnum"), maxLines = 1, modifier = Modifier.padding(start = 8.dp)) }
+                },
+            )
             Text(
                 when {
                     r.endPrompt != null -> "Stopped? Tap to answer"
@@ -1430,6 +1480,25 @@ fun WorkoutCapsule(
             contentAlignment = Alignment.Center,
         ) {
             Icon(if (r.paused) AppIcons.PlayFill else AppIcons.PauseFill, if (r.paused) "Resume" else "Pause", tint = Color.Black, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+/**
+ * [first], then [after] beside it on the same line only if all of it fits in the width left; otherwise
+ * [after] is left out rather than cut short.
+ */
+@Composable
+private fun AfterIfRoom(first: @Composable () -> Unit, after: (@Composable () -> Unit)?) {
+    androidx.compose.ui.layout.Layout(content = { first(); after?.invoke() }) { measurables, constraints ->
+        val loose = constraints.copy(minWidth = 0)
+        val a = measurables[0].measure(loose)
+        val b = measurables.getOrNull(1)?.measure(loose.copy(maxWidth = androidx.compose.ui.unit.Constraints.Infinity))
+            ?.takeIf { a.width + it.width <= constraints.maxWidth }
+        val height = maxOf(a.height, b?.height ?: 0)
+        layout((a.width + (b?.width ?: 0)).coerceIn(constraints.minWidth, constraints.maxWidth), height) {
+            a.placeRelative(0, 0)
+            b?.placeRelative(a.width, 0)
         }
     }
 }

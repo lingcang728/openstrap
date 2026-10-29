@@ -183,6 +183,48 @@ object WorkoutRecorder {
         return Kcal(maxOf(active.toFloat(), previous?.active ?: 0f), maxOf(total.toFloat(), previous?.total ?: 0f))
     }
 
+    /**
+     * Steps per minute start from the strap's running step totals ([totals]: time, total, oldest first), which come
+     * about once a minute while it is connected: each rise is spread over the seconds between its two totals. A total
+     * that falls (the day rolled over, the strap restarted) or comes more than [MAX_STEP_SPREAD_S] after the one before
+     * gives nothing; those minutes take what a sync brings. Each minute is held to 0..250, as the strap's own minutes.
+     */
+    fun minuteSteps(totals: List<Pair<Long, Int>>): Map<Long, Int> {
+        val out = HashMap<Long, Double>()
+        for (i in 1 until totals.size) {
+            val (t0, s0) = totals[i - 1]
+            val (t1, s1) = totals[i]
+            val span = t1 - t0
+            if (span <= 0 || span > MAX_STEP_SPREAD_S || s1 < s0) continue
+            var m = Math.floorDiv(t0, 60L) * 60
+            while (m < t1) {
+                val overlap = minOf(m + 60, t1) - maxOf(m, t0)
+                if (overlap > 0) out[m] = (out[m] ?: 0.0) + (s1 - s0) * overlap.toDouble() / span
+                m += 60
+            }
+        }
+        return out.mapValues { Math.round(it.value).toInt().coerceIn(0, 250) }
+    }
+
+    /**
+     * One tick of the live kcal ([liveKcal]) for [w] as it records at [now]: its [live] readings (time, bpm), the
+     * minutes a history fill wrote ([history]), steps from the strap's live totals ([stepTotals], [minuteSteps]) with
+     * the strap's own minutes ([syncedSteps]) taking over once a sync brings them. Never below [previous]; null
+     * without weight, height and age.
+     */
+    fun liveKcalTick(
+        w: AppWorkout, live: List<Pair<Long, Int>>, history: List<AppWorkoutHeartRate>, stepTotals: List<Pair<Long, Int>>,
+        syncedSteps: Map<Long, Int>, restingHr: Float, maxHr: Float, profile: UserProfile, age: Int?, vo2max: Float?,
+        now: Long, previous: Kcal?,
+    ): Kcal? {
+        val hr = (history.filter { it.fromHistory } + live.map { AppWorkoutHeartRate(w.start, it.first, it.second) }).sortedBy { it.timestamp }
+        val minutes = kcalMinutes(w, hr, minuteSteps(stepTotals) + syncedSteps, restingHr, maxHr, profile, age, vo2max, now) ?: return previous
+        return liveKcal(minutes, now, previous)
+    }
+
+    /** Longer than this between two step totals, the strap was away: its steps aren't spread over the gap. */
+    const val MAX_STEP_SPREAD_S = 15 * 60L
+
     /** One lap: its number, when it began and ended, its average heart rate, and metres when there was GPS. */
     data class Lap(val index: Int, val start: Long, val end: Long, val averageHeartRate: Int?, val meters: Double?)
 

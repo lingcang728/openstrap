@@ -244,4 +244,51 @@ class WorkoutRecorderTest {
         // And the workout as listed carries the same total.
         assertEquals(Math.round(kcal.total), WorkoutRecorder.toWorkout(WorkoutRecorder.withKcal(w, m), start + 1800).calories)
     }
+
+    @Test
+    fun minuteStepsSpreadEachRiseOverItsMinutes() {
+        // 90 steps between 0:30 and 1:30: half in minute 0, half in minute 1. Then 120 over minute 2 exactly.
+        val totals = listOf(start + 30 to 1000, start + 90 to 1090, start + 120 to 1090, start + 180 to 1210)
+        assertEquals(mapOf(start to 45, start + 60 to 45, start + 120 to 120), WorkoutRecorder.minuteSteps(totals))
+        // A fall (a new day) and a gap of 20 minutes give nothing; a burst is held to 250 a minute.
+        assertEquals(emptyMap<Long, Int>(), WorkoutRecorder.minuteSteps(listOf(start to 5000, start + 60 to 20)))
+        assertEquals(emptyMap<Long, Int>(), WorkoutRecorder.minuteSteps(listOf(start to 0, start + 1200 to 2400)))
+        assertEquals(mapOf(start to 250), WorkoutRecorder.minuteSteps(listOf(start to 0, start + 60 to 900)))
+    }
+
+    private fun tick(w: AppWorkout, live: List<Pair<Long, Int>>, now: Long, previous: WorkoutRecorder.Kcal? = null, totals: List<Pair<Long, Int>> = emptyList()) =
+        WorkoutRecorder.liveKcalTick(w, live, emptyList(), totals, emptyMap(), 60f, 190f, man, age, 42f, now, previous)
+
+    @Test
+    fun liveKcalTickLeavesOutThePauseAndOnlyClimbs() {
+        // Five minutes at 150 bpm, then paused from 5:00 with nothing recorded.
+        val readings = (start until start + 300).map { it to 150 }
+        val running = AppWorkout(start, null, 1)
+        val atPause = tick(running, readings, start + 300)!!
+        val paused = running.copy(pausedAt = start + 300)
+        // Ten minutes later, still paused: the figure hasn't moved.
+        val later = tick(paused, readings, start + 900, atPause)!!
+        assertEquals(atPause, later)
+        // A tick that would come out lower (the readings gone, say) holds the figure.
+        assertEquals(atPause, tick(running, emptyList(), start + 300, atPause))
+        // Resumed at 15:00, two more minutes count; the paused ten don't.
+        val resumed = running.copy(pauses = "${start + 300}-${start + 899}")
+        val more = readings + (start + 900 until start + 1020).map { it to 150 }
+        val after = tick(resumed, more, start + 1020, later)!!
+        assertEquals(atPause.active / 5 * 7, after.active, 1e-2f)
+        // Without a profile there's no figure.
+        assertNull(WorkoutRecorder.liveKcalTick(running, readings, emptyList(), emptyList(), emptyMap(), 60f, 190f,
+            org.openstrap.app.data.settings.UserProfile(), age, 42f, start + 300, null))
+    }
+
+    @Test
+    fun liveKcalTickTakesStepsFromTheStrapsTotals() {
+        // A brisk walk at a low heart rate: steps lead. Totals each minute, 130 steps apart.
+        val w = AppWorkout(start, null, 3)
+        val readings = (start until start + 600).map { it to 80 }
+        val totals = (0..10).map { start + it * 60L to 1000 + it * 130 }
+        val hrOnly = tick(w, readings, start + 600)!!
+        val walked = tick(w, readings, start + 600, totals = totals)!!
+        assertTrue(walked.active > hrOnly.active * 1.5f)
+    }
 }
