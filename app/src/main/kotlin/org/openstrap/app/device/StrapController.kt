@@ -68,6 +68,12 @@ interface StrapController {
     /** When syncs last ran and how they ended, kept while the app runs, in the background too. */
     val syncRecord: StateFlow<SyncRecord>
 
+    /**
+     * Once each time a sync ends, after everything it queued and the workout gap fill, as the widgets refresh: for
+     * work that follows a sync ([org.openstrap.app.health.HealthConnectAutoSync]).
+     */
+    val syncEnded: kotlinx.coroutines.flow.SharedFlow<Unit>
+
     /** Latest live heart-rate reading in bpm, or null when live HR is off. */
     val liveHeartRate: StateFlow<Int?>
 

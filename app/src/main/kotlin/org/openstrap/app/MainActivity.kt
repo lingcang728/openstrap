@@ -366,8 +366,8 @@ private enum class Page(
     /** The row on the You or Strap page that opens this page, marked while it's open beside the list on a wide screen. */
     val row: String? = null,
 ) {
-    You, Profile("Profile"), Diagnostics("Diagnostics"), Strap, Alarms("Alarms"), PhoneAlerts("Phone alerts"),
-    HealthAlerts("Health alerts"), Firmware("Firmware"), ZeppAccount("Zepp account"),
+    You, Profile("Profile"), HealthConnect("Health Connect"), Backup("Backup"), Diagnostics("Diagnostics"),
+    Strap, Alarms("Alarms"), PhoneAlerts("Phone alerts"), HealthAlerts("Health alerts"), Firmware("Firmware"), ZeppAccount("Zepp account"),
 }
 
 /** Keeps the open pages across process death, as their names ("Strap,Alarms"). */
@@ -699,11 +699,21 @@ private fun AppRoot(
     val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         uri?.let(deviceVm::exportCsv)
     }
+    // The write permissions are asked for the manual copy and for turning auto sync on; this says which, and survives
+    // the activity being recreated behind the permission screen.
+    var hcForAuto by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val hcLauncher = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { granted ->
-        if (granted.containsAll(container.healthConnect.permissions)) deviceVm.exportHealthConnect()
-        else Toast.makeText(context, "Health Connect permissions were not granted.", Toast.LENGTH_LONG).show()
+        val auto = hcForAuto
+        hcForAuto = false
+        if (!granted.containsAll(container.healthConnect.permissions)) {
+            Toast.makeText(context, "Health Connect permissions were not granted.", Toast.LENGTH_LONG).show()
+        } else if (auto) deviceVm.setAutoHealthConnect(true) else deviceVm.exportHealthConnect()
     }
-    val csvImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    // Automatic backup's folder picker (a cancel leaves it as it was), and Restore, opening on that folder or Download.
+    val backupFolderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri?.let(deviceVm::chooseBackupFolder)
+    }
+    val backupRestoreLauncher = rememberLauncherForActivityResult(org.openstrap.app.ui.device.PickBackup()) { uri ->
         uri?.let(deviceVm::importCsv)
     }
     val hcReadLauncher = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { granted ->
@@ -718,14 +728,21 @@ private fun AppRoot(
             else hcReadLauncher.launch(container.healthConnect.readPermissions)
         }
     }
-    val exportHealthConnect: () -> Unit = {
+    // The manual copy, or turning auto sync on ([forAuto]): with the write permissions, asked for first when missing.
+    val writeHealthConnect: (Boolean) -> Unit = { forAuto ->
         if (!container.healthConnect.isAvailable()) {
             Toast.makeText(context, "Health Connect isn't available on this phone.", Toast.LENGTH_LONG).show()
         } else scope.launch {
-            if (container.healthConnect.hasPermissions()) deviceVm.exportHealthConnect()
-            else hcLauncher.launch(container.healthConnect.permissions)
+            if (container.healthConnect.hasPermissions()) {
+                if (forAuto) deviceVm.setAutoHealthConnect(true) else deviceVm.exportHealthConnect()
+            } else {
+                hcForAuto = forAuto
+                hcLauncher.launch(container.healthConnect.permissions)
+            }
         }
     }
+    val exportHealthConnect: () -> Unit = { writeHealthConnect(false) }
+    val autoHealthConnect: (Boolean) -> Unit = { on -> if (on) writeHealthConnect(true) else deviceVm.setAutoHealthConnect(false) }
 
     // Swiping left and right moves between tabs. [nav] owns the tab and the pager follows it: a tap animates the
     // pager there, and only a swipe the user made, once it settles, is another way to pick the tab. The pager
@@ -1049,19 +1066,60 @@ private fun AppRoot(
                         closeAll = { closePages() },
                         youPage = { open, selected, onBack ->
                             val log by container.strap.log.collectAsStateWithLifecycle()
+                            val hcAuto by deviceVm.healthConnectAuto.collectAsStateWithLifecycle()
+                            val backup by deviceVm.backup.collectAsStateWithLifecycle()
+                            // Permissions can be taken back in Health Connect while away: the row says so on return.
+                            androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { deviceVm.checkAutoHealthConnect(); onPauseOrDispose { } }
                             org.openstrap.app.ui.device.YouPage(
                                 profile, goals, org.openstrap.app.data.Recovery.sleepNeed(profile.age(), profile.sleepNeedMinutes), log.size, padding,
                                 onProfile = { open(Page.Profile) },
                                 onGoals = { editGoals = true },
-                                onSaveCopy = { csvLauncher.launch("openstrap-export.zip") },
-                                onRestoreCopy = { csvImportLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) },
-                                onHealthConnect = exportHealthConnect,
-                                onRestoreHealthConnect = importHealthConnect,
+                                healthConnectAuto = hcAuto,
+                                onHealthConnect = { open(Page.HealthConnect) },
+                                backup = backup,
+                                onBackup = { open(Page.Backup) },
                                 onDiagnostics = { open(Page.Diagnostics) },
                                 onSampleData = if (org.openstrap.app.data.SampleData.AVAILABLE) ({ deviceVm.loadSampleData() }) else null,
                                 onBack = onBack,
                                 selected = selected?.row,
                             )
+                        },
+                        dataPage = { shown, onBack ->
+                            when (shown) {
+                                Page.HealthConnect -> {
+                                    val hcAuto by deviceVm.healthConnectAuto.collectAsStateWithLifecycle()
+                                    // As on the You page: the switch says so when permissions were taken back meanwhile.
+                                    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { deviceVm.checkAutoHealthConnect(); onPauseOrDispose { } }
+                                    org.openstrap.app.ui.device.HealthConnectPage(
+                                        hcAuto, padding,
+                                        onAuto = autoHealthConnect,
+                                        onCopyNow = exportHealthConnect,
+                                        onRestore = importHealthConnect,
+                                        onOpen = {
+                                            if (!org.openstrap.app.ui.device.openHealthConnect(context)) {
+                                                Toast.makeText(context, "Health Connect isn't available on this phone.", Toast.LENGTH_LONG).show()
+                                            }
+                                        },
+                                        onBack = onBack,
+                                    )
+                                }
+                                Page.Backup -> {
+                                    val backup by deviceVm.backup.collectAsStateWithLifecycle()
+                                    val backingUp by deviceVm.backingUp.collectAsStateWithLifecycle()
+                                    val folder = backup.folder?.let(android.net.Uri::parse)
+                                    org.openstrap.app.ui.device.BackupPage(
+                                        backup, backingUp, padding,
+                                        onTurnOn = { backupFolderLauncher.launch(org.openstrap.app.ui.device.BackupCopy.DOCUMENTS) },
+                                        onTurnOff = { deviceVm.turnOffBackup() },
+                                        onFolder = { backupFolderLauncher.launch(folder) },
+                                        onBackUpNow = { deviceVm.backUpNow() },
+                                        onRestore = { backupRestoreLauncher.launch(folder) },
+                                        onSaveCopy = { csvLauncher.launch("openstrap-export.zip") },
+                                        onBack = onBack,
+                                    )
+                                }
+                                else -> Unit
+                            }
                         },
                     )
                 }
@@ -1157,6 +1215,8 @@ private fun OverPages(
     closeAll: () -> Unit,
     /** The You page, built where its launchers and the Goals editor live: how its rows open, the row marked, its back. */
     youPage: @Composable (open: (Page) -> Unit, selected: Page?, onBack: () -> Unit) -> Unit,
+    /** The Health Connect and Backup pages, built there too for the same reason: the page shown and its back. */
+    dataPage: @Composable (shown: Page, onBack: () -> Unit) -> Unit,
 ) {
     // Read from the strap when first needed (the Strap page's rows show what it holds), and again on each page that edits it.
     val needsAlarms = pages.any { it == Page.Strap || it == Page.Alarms || it == Page.HealthAlerts }
@@ -1208,6 +1268,7 @@ private fun OverPages(
             Page.PhoneAlerts -> org.openstrap.app.ui.alarms.PhoneAlertsScreen(container.phoneAlerts, container.settings, padding, onBack = close)
             Page.Firmware -> FirmwareScreen(firmwareVm, padding, onBack = close, onZeppAccount = { open(Page.ZeppAccount) })
             Page.ZeppAccount -> org.openstrap.app.ui.firmware.ZeppAccountScreen(firmwareVm, padding, onBack = close)
+            Page.HealthConnect, Page.Backup -> dataPage(shown, close)
             Page.Profile -> org.openstrap.app.ui.device.ProfileScreen(profile, padding, onSave = { deviceVm.saveProfile(it); close() }, onBack = close)
             Page.Diagnostics -> {
                 val log by container.strap.log.collectAsStateWithLifecycle()

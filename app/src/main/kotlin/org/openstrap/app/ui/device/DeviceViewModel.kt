@@ -129,21 +129,80 @@ class DeviceViewModel(private val container: AppContainer) : ViewModel() {
     fun exportCsv(uri: Uri) = viewModelScope.launch {
         _message.value = runCatching {
             withContext(Dispatchers.IO) {
-                container.app.contentResolver.openOutputStream(uri)!!.use { container.csv.exportZip(it) }
+                val settings = org.openstrap.app.export.SettingsBackup.toJson(container.settings.backupValues())
+                container.app.contentResolver.openOutputStream(uri)!!.use { container.csv.exportZip(it, settings = settings) }
             }
             "Saved a copy."
         }.getOrElse { "Couldn't save the copy: ${it.message}" }
     }
 
-    /** Restores a zip from [exportCsv] into the days before the strap's history. Safe to run twice. */
+    /**
+     * Restores a zip from [exportCsv] or automatic backup into what this phone is missing ([CsvImporter]), and the settings in
+     * it that this phone hasn't set. Safe to run twice.
+     */
     fun importCsv(uri: Uri) = viewModelScope.launch {
         _message.value = runCatching {
             val result = withContext(Dispatchers.IO) {
                 container.app.contentResolver.openInputStream(uri)!!.use { org.openstrap.app.export.CsvImporter(container.database).importZip(it) }
             }
-            "Restored %,d records from before the strap's history. Left out %,d from days it has.".format(result.total, result.present) +
-                (if (result.skipped > 0) " %,d unreadable rows skipped.".format(result.skipped) else "")
+            // A damaged settings file costs the settings only, not the records already restored.
+            val settings = result.settings?.let { json ->
+                runCatching { container.settings.restoreValues(org.openstrap.app.export.SettingsBackup.fromJson(json)) }.getOrDefault(0)
+            } ?: 0
+            BackupCopy.restored(result.total, settings > 0, result.skipped)
         }.getOrElse { "Couldn't restore the copy: ${it.message}" }
+    }
+
+    val backup: StateFlow<org.openstrap.app.data.settings.BackupState> = container.settings.backup
+        .stateIn(viewModelScope, SharingStarted.Eagerly, org.openstrap.app.data.settings.BackupState(null, null, null, null, null))
+
+    /** True while Back up now runs. */
+    private val _backingUp = MutableStateFlow(false)
+    val backingUp = _backingUp.asStateFlow()
+
+    /**
+     * Automatic backup into the folder [uri] the user just picked: keeps the right to write there across restarts, lets
+     * go of the folder before, starts the daily backup and makes the first one now.
+     */
+    fun chooseBackupFolder(uri: Uri) = viewModelScope.launch {
+        val resolver = container.app.contentResolver
+        val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val kept = runCatching { resolver.takePersistableUriPermission(uri, flags) }
+        if (kept.isFailure) {
+            _message.value = "OpenStrap can't keep writing to that folder. Choose another one."
+            return@launch
+        }
+        val before = backup.value.folder
+        if (before != null && before != uri.toString()) releaseFolder(before)
+        val name = withContext(Dispatchers.IO) { runCatching { androidx.documentfile.provider.DocumentFile.fromTreeUri(container.app, uri)?.name }.getOrNull() }
+        container.settings.setBackupFolder(uri.toString(), name)
+        org.openstrap.app.export.AutoBackup.schedule(container.app)
+        backUpNow(quiet = true)
+    }
+
+    /** Stops automatic backup and lets go of its folder. The backups already there stay. */
+    fun turnOffBackup() = viewModelScope.launch {
+        org.openstrap.app.export.AutoBackup.cancel(container.app)
+        backup.value.folder?.let(::releaseFolder)
+        container.settings.clearBackup()
+    }
+
+    private fun releaseFolder(folder: String) {
+        val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        runCatching { container.app.contentResolver.releasePersistableUriPermission(Uri.parse(folder), flags) }
+    }
+
+    /** One backup now, the daily one's way. During a workout it waits for the end instead. [quiet] says only a failure. */
+    fun backUpNow(quiet: Boolean = false) = viewModelScope.launch {
+        if (_backingUp.value) return@launch
+        _backingUp.value = true
+        try {
+            val outcome = org.openstrap.app.export.AutoBackup(container.app, container).run()
+            if (outcome == org.openstrap.app.export.AutoBackup.Outcome.Recording) org.openstrap.app.export.AutoBackup.afterWorkout(container.app)
+            if (!quiet || outcome !is org.openstrap.app.export.AutoBackup.Outcome.Done) _message.value = BackupCopy.outcome(outcome)
+        } finally {
+            _backingUp.value = false
+        }
     }
 
     /** Brings back what OpenStrap exported to Health Connect, filling gaps only. */
@@ -158,8 +217,27 @@ class DeviceViewModel(private val container: AppContainer) : ViewModel() {
         _message.value = runCatching {
             val now = System.currentTimeMillis() / 1000
             val n = container.healthConnect.export(now - 30L * 24 * 3600, now)
+            container.settings.setHealthConnectSynced(now)
             "Wrote $n records to Health Connect (last 30 days)."
         }.getOrElse { "Couldn't write to Health Connect: ${it.message}" }
+    }
+
+    /** Auto sync to Health Connect, for the You page's row. */
+    val healthConnectAuto: StateFlow<org.openstrap.app.data.settings.HealthConnectAuto> =
+        container.settings.healthConnectAuto.stateIn(viewModelScope, SharingStarted.Eagerly, org.openstrap.app.data.settings.HealthConnectAuto())
+
+    /** The auto sync switch. On is called once the write permissions are granted, and writes the last 30 days at once. */
+    fun setAutoHealthConnect(on: Boolean) = viewModelScope.launch {
+        if (!on) { container.settings.setHealthConnectAuto(false); return@launch }
+        _message.value = runCatching {
+            val n = container.autoHealthConnect.turnOn()
+            "Auto sync is on. Wrote $n records to Health Connect (last 30 days)."
+        }.getOrElse { "Auto sync is on, but the first copy didn't work: ${it.message}" }
+    }
+
+    /** The You page opened: auto sync turns off, saying why, if Health Connect or its permissions went away. */
+    fun checkAutoHealthConnect() = viewModelScope.launch {
+        runCatching { container.autoHealthConnect.check() }
     }
 
     companion object {

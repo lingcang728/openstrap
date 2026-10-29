@@ -87,6 +87,7 @@ class StrapManager(
     override val connection = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     override val sync = MutableStateFlow<SyncState>(SyncState.Idle)
     override val syncRecord = MutableStateFlow(SyncRecord())
+    override val syncEnded = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     override val liveHeartRate = MutableStateFlow<Int?>(null)
     override val heartRateReadings = MutableSharedFlow<Int>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     override val sportSessionPushes = MutableSharedFlow<SportSession.Push>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -738,6 +739,7 @@ class StrapManager(
                 runCatching { WorkoutGapFill(dao) { settings.profile.first() }.run()?.let { log(it) } }.onFailure { log("workout gap fill: $it") }
                 // Everything a widget shows may have moved (widgets spec 7).
                 WidgetUpdater.changedAll(context)
+                syncEnded.tryEmit(Unit)
             } finally {
                 syncLock.unlock()
             }

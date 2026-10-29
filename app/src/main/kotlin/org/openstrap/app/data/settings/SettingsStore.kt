@@ -78,7 +78,30 @@ data class UserProfile(
  * The strap as last seen, kept for widgets: [battery] and [charging] from the last connection (null battery before
  * one), [lastSyncDone] when a history sync last finished (epoch seconds), null before one.
  */
+/**
+ * Automatic backup ([org.openstrap.app.export.AutoBackup]): the [folder] chosen (a tree URI) and its [folderName], or
+ * null while off. [lastDone] is when a backup last finished (epoch seconds); [failed] the last run's failure and
+ * [failedAt] when, null once a backup succeeds.
+ */
+data class BackupState(
+    val folder: String?,
+    val folderName: String?,
+    val lastDone: Long?,
+    val failed: org.openstrap.app.export.BackupFiles.Failure?,
+    val failedAt: Long?,
+) {
+    val on get() = folder != null
+}
+
 data class StrapSnapshot(val paired: Boolean, val battery: Int?, val charging: Boolean, val lastSyncDone: Long?)
+
+/**
+ * Auto sync to Health Connect: [on] or off (off by default), when OpenStrap last wrote there ([lastSynced], epoch
+ * seconds, auto or by hand), and why auto sync turned itself off ([stopped]), until the user turns it on again.
+ */
+data class HealthConnectAuto(val on: Boolean = false, val lastSynced: Long? = null, val stopped: Stopped? = null) {
+    enum class Stopped { PERMISSIONS, UNAVAILABLE }
+}
 
 /** Notification buzz patterns: alternating vibrate and pause milliseconds for the strap's motor. */
 enum class BuzzPattern(val label: String, val millis: List<Int>) {
@@ -345,9 +368,43 @@ class SettingsStore(private val context: Context) {
     /** Forgets the strap and the Zepp sign-in; the user's profile and goals stay. */
     suspend fun forgetDevice() {
         context.dataStore.edit { prefs ->
-            val keep = setOf(birthYear, sex, weight, height, imperial, sleepNeed, maxHr, activityLevel, activityAt, bodyAt, betaBlocker, pregnant, stepGoal, sleepGoal, activeGoal, todayHidden, todayPinned, buzzCalls, buzzNotifications, buzzPattern, callBuzz)
+            val keep = setOf(birthYear, sex, weight, height, imperial, sleepNeed, maxHr, activityLevel, activityAt, bodyAt, betaBlocker, pregnant, stepGoal, sleepGoal, activeGoal, todayHidden, todayPinned, hcAuto, hcSynced, hcStopped, buzzCalls, buzzNotifications, buzzPattern, callBuzz, backupFolder, backupFolderName, backupDone, backupFailed, backupFailedAt)
             prefs.asMap().keys.filter { it !in keep }.forEach { prefs.remove(it) }
         }
+    }
+
+    private val hcAuto = androidx.datastore.preferences.core.booleanPreferencesKey("health_connect_auto")
+    private val hcSynced = longPreferencesKey("health_connect_synced")
+    private val hcStopped = stringPreferencesKey("health_connect_auto_stopped")
+
+    /** Auto sync to Health Connect, kept when the strap is forgotten: it's about the data, not the strap. */
+    val healthConnectAuto: Flow<HealthConnectAuto> = context.dataStore.data.map { prefs ->
+        HealthConnectAuto(
+            prefs[hcAuto] == true,
+            prefs[hcSynced],
+            prefs[hcStopped]?.let { v -> HealthConnectAuto.Stopped.entries.firstOrNull { it.name == v } },
+        )
+    }
+
+    /** The user's switch; either way clears why it last stopped. */
+    suspend fun setHealthConnectAuto(enabled: Boolean) {
+        context.dataStore.edit {
+            it[hcAuto] = enabled
+            it.remove(hcStopped)
+        }
+    }
+
+    /** Auto sync turns itself off, and the You page says [why]. */
+    suspend fun stopHealthConnectAuto(why: HealthConnectAuto.Stopped) {
+        context.dataStore.edit {
+            it[hcAuto] = false
+            it[hcStopped] = why.name
+        }
+    }
+
+    /** OpenStrap wrote to Health Connect at [epochSeconds]. */
+    suspend fun setHealthConnectSynced(epochSeconds: Long) {
+        context.dataStore.edit { it[hcSynced] = epochSeconds }
     }
 
     private val buzzCalls = androidx.datastore.preferences.core.booleanPreferencesKey("buzz_calls")
@@ -420,5 +477,75 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setLastSync(type: String, epochSeconds: Long) {
         context.dataStore.edit { it[longPreferencesKey("last_sync_$type")] = epochSeconds }
+    }
+
+    private val backupFolder = stringPreferencesKey("backup_folder")
+    private val backupFolderName = stringPreferencesKey("backup_folder_name")
+    private val backupDone = longPreferencesKey("backup_last_done")
+    private val backupFailed = stringPreferencesKey("backup_failed")
+    private val backupFailedAt = longPreferencesKey("backup_failed_at")
+
+    val backup: Flow<BackupState> = context.dataStore.data.map { prefs ->
+        BackupState(
+            prefs[backupFolder], prefs[backupFolderName], prefs[backupDone],
+            prefs[backupFailed]?.let { v -> org.openstrap.app.export.BackupFiles.Failure.entries.firstOrNull { it.name == v } },
+            prefs[backupFailedAt],
+        )
+    }
+
+    /** Turns automatic backup on, or moves it to another folder; the last run's result goes with the old folder. */
+    suspend fun setBackupFolder(uri: String, name: String?) {
+        context.dataStore.edit {
+            it[backupFolder] = uri
+            if (name != null) it[backupFolderName] = name else it.remove(backupFolderName)
+            it.remove(backupDone); it.remove(backupFailed); it.remove(backupFailedAt)
+        }
+    }
+
+    suspend fun clearBackup() {
+        context.dataStore.edit {
+            it.remove(backupFolder); it.remove(backupFolderName); it.remove(backupDone); it.remove(backupFailed); it.remove(backupFailedAt)
+        }
+    }
+
+    suspend fun setBackupDone(epochSeconds: Long) {
+        context.dataStore.edit {
+            it[backupDone] = epochSeconds
+            it.remove(backupFailed); it.remove(backupFailedAt)
+        }
+    }
+
+    suspend fun setBackupFailed(failure: org.openstrap.app.export.BackupFiles.Failure, epochSeconds: Long) {
+        context.dataStore.edit {
+            it[backupFailed] = failure.name
+            it[backupFailedAt] = epochSeconds
+        }
+    }
+
+    /** The settings a backup carries ([org.openstrap.app.export.SettingsBackup.KEYS]), by key name, as stored. */
+    suspend fun backupValues(): Map<String, Any> =
+        context.dataStore.data.first().asMap().mapKeys { it.key.name }.filterKeys { it in org.openstrap.app.export.SettingsBackup.KEYS }
+
+    /**
+     * Restores [values] from a backup, only those this phone has never set, so restoring twice or onto a phone already
+     * set up changes nothing the user chose here. Returns how many were written.
+     */
+    suspend fun restoreValues(values: Map<String, Any>): Int {
+        var written = 0
+        context.dataStore.edit { prefs ->
+            val present = prefs.asMap().keys.mapTo(HashSet()) { it.name }
+            for ((name, v) in org.openstrap.app.export.SettingsBackup.missing(values, present)) {
+                when (v) {
+                    is Int -> prefs[androidx.datastore.preferences.core.intPreferencesKey(name)] = v
+                    is Long -> prefs[longPreferencesKey(name)] = v
+                    is Float -> prefs[androidx.datastore.preferences.core.floatPreferencesKey(name)] = v
+                    is Boolean -> prefs[androidx.datastore.preferences.core.booleanPreferencesKey(name)] = v
+                    is String -> prefs[stringPreferencesKey(name)] = v
+                    else -> continue
+                }
+                written++
+            }
+        }
+        return written
     }
 }
