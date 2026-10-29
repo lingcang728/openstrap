@@ -95,6 +95,14 @@ data class BackupState(
 
 data class StrapSnapshot(val paired: Boolean, val battery: Int?, val charging: Boolean, val lastSyncDone: Long?)
 
+/**
+ * Auto sync to Health Connect: [on] or off (off by default), when OpenStrap last wrote there ([lastSynced], epoch
+ * seconds, auto or by hand), and why auto sync turned itself off ([stopped]), until the user turns it on again.
+ */
+data class HealthConnectAuto(val on: Boolean = false, val lastSynced: Long? = null, val stopped: Stopped? = null) {
+    enum class Stopped { PERMISSIONS, UNAVAILABLE }
+}
+
 /** Notification buzz patterns: alternating vibrate and pause milliseconds for the strap's motor. */
 enum class BuzzPattern(val label: String, val millis: List<Int>) {
     ONE_SHORT("Single", listOf(200)),
@@ -360,9 +368,43 @@ class SettingsStore(private val context: Context) {
     /** Forgets the strap and the Zepp sign-in; the user's profile and goals stay. */
     suspend fun forgetDevice() {
         context.dataStore.edit { prefs ->
-            val keep = setOf(birthYear, sex, weight, height, imperial, sleepNeed, maxHr, activityLevel, activityAt, bodyAt, betaBlocker, pregnant, stepGoal, sleepGoal, activeGoal, todayHidden, todayPinned, buzzCalls, buzzNotifications, buzzPattern, callBuzz, backupFolder, backupFolderName, backupDone, backupFailed, backupFailedAt)
+            val keep = setOf(birthYear, sex, weight, height, imperial, sleepNeed, maxHr, activityLevel, activityAt, bodyAt, betaBlocker, pregnant, stepGoal, sleepGoal, activeGoal, todayHidden, todayPinned, hcAuto, hcSynced, hcStopped, buzzCalls, buzzNotifications, buzzPattern, callBuzz, backupFolder, backupFolderName, backupDone, backupFailed, backupFailedAt)
             prefs.asMap().keys.filter { it !in keep }.forEach { prefs.remove(it) }
         }
+    }
+
+    private val hcAuto = androidx.datastore.preferences.core.booleanPreferencesKey("health_connect_auto")
+    private val hcSynced = longPreferencesKey("health_connect_synced")
+    private val hcStopped = stringPreferencesKey("health_connect_auto_stopped")
+
+    /** Auto sync to Health Connect, kept when the strap is forgotten: it's about the data, not the strap. */
+    val healthConnectAuto: Flow<HealthConnectAuto> = context.dataStore.data.map { prefs ->
+        HealthConnectAuto(
+            prefs[hcAuto] == true,
+            prefs[hcSynced],
+            prefs[hcStopped]?.let { v -> HealthConnectAuto.Stopped.entries.firstOrNull { it.name == v } },
+        )
+    }
+
+    /** The user's switch; either way clears why it last stopped. */
+    suspend fun setHealthConnectAuto(enabled: Boolean) {
+        context.dataStore.edit {
+            it[hcAuto] = enabled
+            it.remove(hcStopped)
+        }
+    }
+
+    /** Auto sync turns itself off, and the You page says [why]. */
+    suspend fun stopHealthConnectAuto(why: HealthConnectAuto.Stopped) {
+        context.dataStore.edit {
+            it[hcAuto] = false
+            it[hcStopped] = why.name
+        }
+    }
+
+    /** OpenStrap wrote to Health Connect at [epochSeconds]. */
+    suspend fun setHealthConnectSynced(epochSeconds: Long) {
+        context.dataStore.edit { it[hcSynced] = epochSeconds }
     }
 
     private val buzzCalls = androidx.datastore.preferences.core.booleanPreferencesKey("buzz_calls")

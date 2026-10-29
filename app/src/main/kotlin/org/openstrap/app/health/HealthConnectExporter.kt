@@ -106,51 +106,13 @@ class HealthConnectExporter(private val context: Context, private val dao: Healt
     /** Exports everything in [from, to] (epoch seconds). Returns the number of records written. */
     suspend fun export(from: Long, to: Long): Int {
         val records = mutableListOf<Record>()
+        records += heartRate(from, to)
+        records += steps(from, to)
+        records += workouts(dao.appWorkoutsOnce(from, to))
 
-        // Heart rate: one record per hour with all samples in it.
-        val hr = dao.heartRateOnce(from, to) + dao.activityOnce(from, to)
-            .mapNotNull { m -> m.heartRate?.takeIf { it in 30..230 }?.let { org.openstrap.app.data.db.HeartRateSample(m.timestamp, it) } }
-        hr.distinctBy { it.timestamp }.sortedBy { it.timestamp }.groupBy { it.timestamp / 3600 }.forEach { (hour, samples) ->
-            val start = hour * 3600
-            val end = samples.last().timestamp + 1 // not the end of the hour, which can be in the future
-            records += HeartRateRecord(
-                startTime = Instant.ofEpochSecond(start), startZoneOffset = offset(start),
-                endTime = Instant.ofEpochSecond(end), endZoneOffset = offset(end),
-                samples = samples.map { HeartRateRecord.Sample(Instant.ofEpochSecond(it.timestamp), it.bpm.toLong()) },
-                metadata = meta("hr:$start"),
-            )
-        }
-
-        for (m in dao.activityOnce(from, to)) {
-            if (m.steps <= 0) continue
-            records += StepsRecord(
-                startTime = Instant.ofEpochSecond(m.timestamp), startZoneOffset = offset(m.timestamp),
-                endTime = Instant.ofEpochSecond(m.timestamp + 60), endZoneOffset = offset(m.timestamp),
-                count = m.steps.toLong(),
-                metadata = meta("steps:${m.timestamp}"),
-            )
-        }
-
-        // Workouts recorded on the phone, as exercise sessions; GPS distance with them (a step estimate stays here).
-        for (w in dao.appWorkoutsOnce(from, to)) {
-            val end = w.end ?: continue
-            records += androidx.health.connect.client.records.ExerciseSessionRecord(
-                startTime = Instant.ofEpochSecond(w.from), startZoneOffset = offset(w.from),
-                endTime = Instant.ofEpochSecond(end), endZoneOffset = offset(end),
-                exerciseType = exerciseType(w.sportType),
-                title = org.openstrap.app.data.Workouts.sportName(w.sportType),
-                metadata = meta("workout:${w.start}"),
-            )
-            val meters = w.distanceMeters?.takeIf { !w.distanceFromSteps && it > 0 } ?: continue
-            records += androidx.health.connect.client.records.DistanceRecord(
-                startTime = Instant.ofEpochSecond(w.from), startZoneOffset = offset(w.from),
-                endTime = Instant.ofEpochSecond(end), endZoneOffset = offset(end),
-                distance = androidx.health.connect.client.units.Length.meters(meters.toDouble()),
-                metadata = meta("distance:${w.start}"),
-            )
-        }
-
-        for (s in dao.sleepSessionsOnce(from, to)) {
+        // Every night the delete below can reach (from a day before [from]) is written again, so a night ending
+        // just before the range isn't taken out of Health Connect and left out.
+        for (s in dao.sleepSessionsOnce(from - 86_400, to)) {
             // Rows synced before stage ends were made exclusive can be zero length; Health Connect rejects those,
             // and stages must stay inside the session.
             val stages = dao.sleepStagesOnce(s.start).mapNotNull {
@@ -208,6 +170,68 @@ class HealthConnectExporter(private val context: Context, private val dao: Healt
         // Health Connect caps the batch size per call.
         records.chunked(500).forEach { client.insertRecords(it) }
         return records.size
+    }
+
+    /**
+     * Exports the phone workout that started at [start], as it's saved: the session, its distance, and the heart rate
+     * and steps over it ([AutoHealthConnect.workoutRange], whole hours of heart rate). Sleep is left alone. Returns
+     * the number of records written; 0 for a workout that isn't there or hasn't ended.
+     */
+    suspend fun exportWorkout(start: Long, now: Long = System.currentTimeMillis() / 1000): Int {
+        val w = dao.appWorkoutOnce(start) ?: return 0
+        val end = w.end ?: return 0
+        val (from, to) = AutoHealthConnect.workoutRange(w.from, end, now)
+        val records = heartRate(from, to) + steps(from, to) + workouts(listOf(w))
+        records.chunked(500).forEach { client.insertRecords(it) }
+        return records.size
+    }
+
+    /** Heart rate: one record per hour with all samples in it. */
+    private suspend fun heartRate(from: Long, to: Long): List<Record> {
+        val hr = dao.heartRateOnce(from, to) + dao.activityOnce(from, to)
+            .mapNotNull { m -> m.heartRate?.takeIf { it in 30..230 }?.let { org.openstrap.app.data.db.HeartRateSample(m.timestamp, it) } }
+        return hr.distinctBy { it.timestamp }.sortedBy { it.timestamp }.groupBy { it.timestamp / 3600 }.map { (hour, samples) ->
+            val start = hour * 3600
+            val end = samples.last().timestamp + 1 // not the end of the hour, which can be in the future
+            HeartRateRecord(
+                startTime = Instant.ofEpochSecond(start), startZoneOffset = offset(start),
+                endTime = Instant.ofEpochSecond(end), endZoneOffset = offset(end),
+                samples = samples.map { HeartRateRecord.Sample(Instant.ofEpochSecond(it.timestamp), it.bpm.toLong()) },
+                metadata = meta("hr:$start"),
+            )
+        }
+    }
+
+    private suspend fun steps(from: Long, to: Long): List<Record> = dao.activityOnce(from, to).filter { it.steps > 0 }.map { m ->
+        StepsRecord(
+            startTime = Instant.ofEpochSecond(m.timestamp), startZoneOffset = offset(m.timestamp),
+            endTime = Instant.ofEpochSecond(m.timestamp + 60), endZoneOffset = offset(m.timestamp),
+            count = m.steps.toLong(),
+            metadata = meta("steps:${m.timestamp}"),
+        )
+    }
+
+    /** Workouts recorded on the phone, as exercise sessions; GPS distance with them (a step estimate stays here). */
+    private fun workouts(list: List<org.openstrap.app.data.db.AppWorkout>): List<Record> {
+        val records = mutableListOf<Record>()
+        for (w in list) {
+            val end = w.end ?: continue
+            records += androidx.health.connect.client.records.ExerciseSessionRecord(
+                startTime = Instant.ofEpochSecond(w.from), startZoneOffset = offset(w.from),
+                endTime = Instant.ofEpochSecond(end), endZoneOffset = offset(end),
+                exerciseType = exerciseType(w.sportType),
+                title = org.openstrap.app.data.Workouts.sportName(w.sportType),
+                metadata = meta("workout:${w.start}"),
+            )
+            val meters = w.distanceMeters?.takeIf { !w.distanceFromSteps && it > 0 } ?: continue
+            records += androidx.health.connect.client.records.DistanceRecord(
+                startTime = Instant.ofEpochSecond(w.from), startZoneOffset = offset(w.from),
+                endTime = Instant.ofEpochSecond(end), endZoneOffset = offset(end),
+                distance = androidx.health.connect.client.units.Length.meters(meters.toDouble()),
+                metadata = meta("distance:${w.start}"),
+            )
+        }
+        return records
     }
 
     /**

@@ -219,8 +219,27 @@ class DeviceViewModel(private val container: AppContainer) : ViewModel() {
         _message.value = runCatching {
             val now = System.currentTimeMillis() / 1000
             val n = container.healthConnect.export(now - 30L * 24 * 3600, now)
+            container.settings.setHealthConnectSynced(now)
             "Wrote $n records to Health Connect (last 30 days)."
         }.getOrElse { "Couldn't write to Health Connect: ${it.message}" }
+    }
+
+    /** Auto sync to Health Connect, for the You page's row. */
+    val healthConnectAuto: StateFlow<org.openstrap.app.data.settings.HealthConnectAuto> =
+        container.settings.healthConnectAuto.stateIn(viewModelScope, SharingStarted.Eagerly, org.openstrap.app.data.settings.HealthConnectAuto())
+
+    /** The auto sync switch. On is called once the write permissions are granted, and writes the last 30 days at once. */
+    fun setAutoHealthConnect(on: Boolean) = viewModelScope.launch {
+        if (!on) { container.settings.setHealthConnectAuto(false); return@launch }
+        _message.value = runCatching {
+            val n = container.autoHealthConnect.turnOn()
+            "Auto sync is on. Wrote $n records to Health Connect (last 30 days)."
+        }.getOrElse { "Auto sync is on, but the first copy didn't work: ${it.message}" }
+    }
+
+    /** The You page opened: auto sync turns off, saying why, if Health Connect or its permissions went away. */
+    fun checkAutoHealthConnect() = viewModelScope.launch {
+        runCatching { container.autoHealthConnect.check() }
     }
 
     companion object {
