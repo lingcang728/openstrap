@@ -132,10 +132,13 @@ class HealthConnectExporter(private val context: Context, private val dao: Healt
 
         // Every night the delete below can reach (from a day before [from]) is written again, so a night ending
         // just before the range isn't taken out of Health Connect and left out.
-        for (s in dao.sleepSessionsOnce(from - 86_400, to)) {
+        val napEdits = dao.napEditsOnce().associateBy { it.strapStart }
+        for (strapSession in dao.sleepSessionsOnce(from - 86_400, to)) {
+            // A nap goes with the user's own times; its record id stays the strap's start, so it replaces the old one.
+            val s = org.openstrap.app.data.NapTimes.apply(strapSession, napEdits)
             // Rows synced before stage ends were made exclusive can be zero length; Health Connect rejects those,
             // and stages must stay inside the session.
-            val stages = dao.sleepStagesOnce(s.start).mapNotNull {
+            val stages = dao.sleepStagesOnce(strapSession.start).mapNotNull {
                 val start = it.start.coerceAtLeast(s.start)
                 val end = maxOf(it.end, it.start + 60).coerceAtMost(s.end)
                 if (end <= start) return@mapNotNull null
@@ -154,7 +157,7 @@ class HealthConnectExporter(private val context: Context, private val dao: Healt
                 startTime = Instant.ofEpochSecond(s.start), startZoneOffset = offset(s.start),
                 endTime = Instant.ofEpochSecond(s.end), endZoneOffset = offset(s.end),
                 stages = stages,
-                metadata = meta("sleep:${s.start}"),
+                metadata = meta("sleep:${strapSession.start}"),
             )
         }
 

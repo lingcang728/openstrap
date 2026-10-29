@@ -85,10 +85,14 @@ class HealthRepository(private val dao: HealthDao) {
     }
 
 
-    /** Emits whenever new heart-rate, stress or sleep data lands, or a strap workout comes or goes, so derived scores can refresh. */
+    /**
+     * Emits whenever new heart-rate, stress or sleep data lands, a strap workout comes or goes, or a nap's times are
+     * changed, so derived scores can refresh.
+     */
     fun changes(): Flow<Unit> = kotlinx.coroutines.flow.combine(
         dao.latestHeartRateTime(), dao.latestStressTime(), dao.latestSleepEnd(), dao.workoutCountFlow().distinctUntilChanged(),
-    ) { _, _, _, _ -> }
+        dao.napEdits().distinctUntilChanged(),
+    ) { _, _, _, _, _ -> }
 
     /** Local days that have any heart rate, steps or sleep, for the calendar. */
     fun daysWithData(zone: ZoneId = ZoneId.systemDefault()): Flow<Set<LocalDate>> = dao.hoursWithData().map { hours ->
@@ -99,6 +103,13 @@ class HealthRepository(private val dao: HealthDao) {
     fun activity(w: DayWindow): Flow<List<ActivityMinute>> = dao.activity(w.from, w.to)
     fun sleepSessions(w: DayWindow): Flow<List<SleepSession>> = dao.sleepSessions(w.from, w.to)
     fun sleepStages(sessionStart: Long): Flow<List<SleepStage>> = dao.sleepStages(sessionStart)
+    fun napEdits(): Flow<List<org.openstrap.app.data.db.NapEdit>> = dao.napEdits()
+
+    /** Keeps [start] to [end] as the strap's nap [strap]'s times; its own times again drop the edit. */
+    suspend fun setNapTimes(strap: SleepSession, start: Long, end: Long) {
+        val e = NapTimes.edit(strap, start, end)
+        if (e == null) dao.deleteNapEdit(strap.start) else dao.upsertNapEdit(e)
+    }
     fun spo2(w: DayWindow): Flow<List<Spo2Sample>> = dao.spo2(w.from, w.to)
     /**
      * The day's stress readings that count as daily stress: those outside the exclusion around workouts

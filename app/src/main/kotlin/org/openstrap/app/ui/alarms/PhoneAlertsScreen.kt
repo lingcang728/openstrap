@@ -10,7 +10,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -25,6 +30,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import kotlinx.coroutines.launch
 import org.openstrap.app.data.settings.BuzzPattern
 import org.openstrap.app.data.settings.CallBuzz
+import org.openstrap.app.data.settings.QuietHours
 import org.openstrap.app.data.settings.SettingsStore
 import org.openstrap.app.device.PhoneAlerts
 import org.openstrap.app.device.StrapNotificationListener
@@ -36,6 +42,8 @@ import org.openstrap.app.ui.glow.GlowType
 import org.openstrap.app.ui.glow.PageButton
 import org.openstrap.app.ui.glow.PageHeader
 import org.openstrap.app.ui.glow.PageNote
+import org.openstrap.app.ui.glow.PageRow
+import org.openstrap.app.ui.glow.PageSheet
 import org.openstrap.app.ui.glow.PagePanel
 import org.openstrap.app.ui.glow.PageSwitchRow
 import androidx.compose.ui.graphics.Color
@@ -48,6 +56,17 @@ fun phoneAlertsSummary(calls: Boolean, notifications: Boolean): String = when {
     calls -> "Calls"
     notifications -> "Notifications"
     else -> "Off"
+}
+
+/** "22:00" for minutes after midnight. */
+internal fun quietClock(minutes: Int): String = "%02d:%02d".format(minutes / 60, minutes % 60)
+
+/** Under the Quiet hours switch: what it holds back, and when. */
+internal fun quietHoursSummary(q: QuietHours, callsOn: Boolean): String = when {
+    !q.on -> "Pause the buzz at night or during set hours."
+    q.from == q.to -> "Pick different start and end times."
+    q.calls && callsOn -> "No buzz from ${quietClock(q.from)} to ${quietClock(q.to)}, calls included."
+    else -> "No notification buzz from ${quietClock(q.from)} to ${quietClock(q.to)}."
 }
 
 /**
@@ -67,6 +86,9 @@ fun PhoneAlertsScreen(alerts: PhoneAlerts, settings: SettingsStore, contentPaddi
     val callStyle by settings.callBuzzStyle.collectAsState(CallBuzz.STEADY)
     var previewError by remember { mutableStateOf<String?>(null) }
     var callPreviewError by remember { mutableStateOf<String?>(null) }
+    val quiet by settings.quietHours.collectAsState(QuietHours())
+    // Which end of the quiet hours is being picked: true for From, false for To.
+    var pickingFrom by remember { mutableStateOf<Boolean?>(null) }
 
     // The user may grant access in system settings and come back.
     LifecycleResumeEffect(Unit) { alerts.refresh(); onPauseOrDispose { } }
@@ -138,10 +160,47 @@ fun PhoneAlertsScreen(alerts: PhoneAlerts, settings: SettingsStore, contentPaddi
                         })
                         previewError?.let { PageNote(it, color = MetricColors.warn) }
                     }
+                    PageSwitchRow("Quiet hours", quietHoursSummary(quiet, calls && callPermission), quiet.on, { on ->
+                        scope.launch { settings.setQuietHours(quiet.copy(on = on)) }
+                    })
+                    if (quiet.on) {
+                        PageRow("From", quietClock(quiet.from), onClick = { pickingFrom = true }, divider = false)
+                        PageRow("To", quietClock(quiet.to), onClick = { pickingFrom = false })
+                        if (calls && callPermission) {
+                            PageSwitchRow("Calls too", "Off lets a ringing phone still buzz.", quiet.calls, { on ->
+                                scope.launch { settings.setQuietHours(quiet.copy(calls = on)) }
+                            })
+                        }
+                    }
                 }
                 // Do Not Disturb is said once, here, for calls and notifications both.
                 PageNote("Follows Do Not Disturb and silent apps. Never reads what a notification says.")
             }
+        }
+    }
+
+    pickingFrom?.let { from ->
+        QuietTimeSheet(
+            if (from) "Quiet from" else "Quiet until", if (from) quiet.from else quiet.to,
+            onSave = { m ->
+                pickingFrom = null
+                scope.launch { settings.setQuietHours(if (from) quiet.copy(from = m) else quiet.copy(to = m)) }
+            },
+            onDismiss = { pickingFrom = null },
+        )
+    }
+}
+
+/** One end of the quiet hours on the alarms' clock, then Cancel and Save. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun QuietTimeSheet(title: String, minutes: Int, onSave: (Int) -> Unit, onDismiss: () -> Unit) {
+    val time = rememberTimePickerState(minutes / 60, minutes % 60, is24Hour = true)
+    PageSheet(onDismiss, title) {
+        TimePicker(time, Modifier.align(Alignment.CenterHorizontally), colors = AlarmClockColors())
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            PageButton("Cancel", onDismiss, Modifier.weight(1f))
+            PageButton("Save", { onSave(time.hour * 60 + time.minute) }, Modifier.weight(1f), primary = true)
         }
     }
 }

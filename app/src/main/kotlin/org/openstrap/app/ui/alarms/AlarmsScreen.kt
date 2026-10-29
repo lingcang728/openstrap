@@ -265,7 +265,7 @@ private fun AlarmSheet(alarm: Alarm, isNew: Boolean, onSave: (Alarm) -> Unit, on
 /** The clock in the page's colours: white for the chosen hand and digits, the Control surface for the rest. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AlarmClockColors() = TimePickerDefaults.colors(
+internal fun AlarmClockColors() = TimePickerDefaults.colors(
     clockDialColor = ControlSurface,
     clockDialSelectedContentColor = Color.Black,
     clockDialUnselectedContentColor = Color.White,

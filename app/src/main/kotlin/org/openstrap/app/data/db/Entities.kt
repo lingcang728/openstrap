@@ -45,6 +45,17 @@ data class SleepSession(
     val wakeCount: Int? = null,
 )
 
+/**
+ * The user's own times for a nap the strap detected, kept apart from [SleepSession] because a sync rewrites the
+ * day's naps. Keyed by the strap's start for the nap, which stays the same across syncs.
+ */
+@Entity(tableName = "nap_edit")
+data class NapEdit(
+    @PrimaryKey val strapStart: Long,
+    val start: Long,
+    val end: Long,
+)
+
 @Entity(tableName = "sleep_stage", indices = [Index("sessionStart")])
 data class SleepStage(
     @PrimaryKey val start: Long,

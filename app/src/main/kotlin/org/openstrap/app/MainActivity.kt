@@ -925,6 +925,7 @@ private fun AppRoot(
                         onOpen = push, onSwitch = { setStack(t, stack.dropLast(1) + it) }, onSelectDay = dayVm::select,
                         contentPadding = padding, onBack = pop,
                         workouts = workouts, paiHistory = paiHistory, onEditProfile = { openPage(Page.Profile) }, energyHistory = energyHistory,
+                        onSetNapTimes = dayVm::setNapTimes,
                     )
                     Detail.Week -> org.openstrap.app.ui.glow.WeekDetail(
                         org.openstrap.app.ui.glow.ActivityDetailContext(
