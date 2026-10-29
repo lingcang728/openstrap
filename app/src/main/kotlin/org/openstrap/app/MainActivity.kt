@@ -706,9 +706,12 @@ private fun AppRoot(
     val hcLauncher = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { granted ->
         val auto = hcForAuto
         hcForAuto = false
-        if (!granted.containsAll(container.healthConnect.permissions)) {
-            Toast.makeText(context, "Health Connect permissions were not granted.", Toast.LENGTH_LONG).show()
-        } else if (auto) deviceVm.setAutoHealthConnect(true) else deviceVm.exportHealthConnect()
+        scope.launch {
+            // The needed ones may have been granted before, outside what this screen returns; the calorie ones may stay off.
+            val ok = granted.containsAll(container.healthConnect.permissions) || runCatching { container.healthConnect.hasPermissions() }.getOrDefault(false)
+            if (!ok) Toast.makeText(context, "Health Connect permissions were not granted.", Toast.LENGTH_LONG).show()
+            else if (auto) deviceVm.setAutoHealthConnect(true) else deviceVm.exportHealthConnect()
+        }
     }
     // Automatic backup's folder picker (a cancel leaves it as it was), and Restore, opening on that folder or Download.
     val backupFolderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -734,11 +737,13 @@ private fun AppRoot(
         if (!container.healthConnect.isAvailable()) {
             Toast.makeText(context, "Health Connect isn't available on this phone.", Toast.LENGTH_LONG).show()
         } else scope.launch {
-            if (container.healthConnect.hasPermissions()) {
+            // The calorie permissions are optional, but asked for again until granted: the launcher goes on with the
+            // ones it needs.
+            if (container.healthConnect.hasRequestedPermissions()) {
                 if (forAuto) deviceVm.setAutoHealthConnect(true) else deviceVm.exportHealthConnect()
             } else {
                 hcForAuto = forAuto
-                hcLauncher.launch(container.healthConnect.permissions)
+                hcLauncher.launch(container.healthConnect.requestedPermissions)
             }
         }
     }

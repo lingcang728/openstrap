@@ -14,6 +14,9 @@ import org.openstrap.app.data.db.Spo2Sample
 import java.time.Duration
 import kotlin.reflect.KClass
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
+import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
+import androidx.health.connect.client.units.Energy
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.OxygenSaturationRecord
@@ -49,6 +52,18 @@ class HealthConnectExporter(private val context: Context, private val dao: Healt
         HealthPermission.getWritePermission(androidx.health.connect.client.records.DistanceRecord::class),
     )
 
+    /**
+     * Asked for with [permissions], but not needed: without them everything else is still written and the calories
+     * are left out, so a grant from before calories, or one turned off, keeps working.
+     */
+    val caloriePermissions = setOf(
+        HealthPermission.getWritePermission(ActiveCaloriesBurnedRecord::class),
+        HealthPermission.getWritePermission(TotalCaloriesBurnedRecord::class),
+    )
+
+    /** What a write asks Health Connect for. */
+    val requestedPermissions: Set<String> get() = permissions + caloriePermissions
+
     /** Reading back what was exported; history is the permission to read further back than 30 days. */
     val readPermissions: Set<String>
         get() = setOf(
@@ -71,13 +86,17 @@ class HealthConnectExporter(private val context: Context, private val dao: Healt
     suspend fun hasPermissions(): Boolean =
         client.permissionController.getGrantedPermissions().containsAll(permissions)
 
+    /** Every permission a write asks for, the optional calorie ones too: when not, the write asks again first. */
+    suspend fun hasRequestedPermissions(): Boolean =
+        client.permissionController.getGrantedPermissions().containsAll(requestedPermissions)
+
     /** The record reads the user has granted (any of them is enough to import that kind). */
     suspend fun hasReadPermissions(): Boolean =
         client.permissionController.getGrantedPermissions().any { it in readPermissions }
 
     private val device = Device(type = Device.TYPE_FITNESS_BAND, manufacturer = "Amazfit", model = "Helio Strap")
 
-    private fun meta(id: String) = Metadata.autoRecorded(device = device, clientRecordId = "openstrap:$id", clientRecordVersion = 1)
+    private fun meta(id: String, version: Long = 1) = Metadata.autoRecorded(device = device, clientRecordId = "openstrap:$id", clientRecordVersion = version)
 
     /** Zepp's sport ids to Health Connect's exercise types; anything else is "other workout". */
     private fun exerciseType(sport: Int): Int = with(androidx.health.connect.client.records.ExerciseSessionRecord) {
@@ -104,11 +123,12 @@ class HealthConnectExporter(private val context: Context, private val dao: Healt
         ZoneId.systemDefault().rules.getOffset(Instant.ofEpochSecond(epochSeconds))
 
     /** Exports everything in [from, to] (epoch seconds). Returns the number of records written. */
-    suspend fun export(from: Long, to: Long): Int {
+    suspend fun export(from: Long, to: Long, now: Long = System.currentTimeMillis() / 1000): Int {
         val records = mutableListOf<Record>()
         records += heartRate(from, to)
         records += steps(from, to)
         records += workouts(dao.appWorkoutsOnce(from, to))
+        records += calories(from, to, now)
 
         // Every night the delete below can reach (from a day before [from]) is written again, so a night ending
         // just before the range isn't taken out of Health Connect and left out.
@@ -174,16 +194,55 @@ class HealthConnectExporter(private val context: Context, private val dao: Healt
 
     /**
      * Exports the phone workout that started at [start], as it's saved: the session, its distance, and the heart rate
-     * and steps over it ([AutoHealthConnect.workoutRange], whole hours of heart rate). Sleep is left alone. Returns
-     * the number of records written; 0 for a workout that isn't there or hasn't ended.
+     * and steps over it ([AutoHealthConnect.workoutRange], whole hours of heart rate), and the calories of the days it
+     * touches, whose kcal it moved. Sleep is left alone. Returns the number of records written; 0 for a workout that
+     * isn't there or hasn't ended.
      */
     suspend fun exportWorkout(start: Long, now: Long = System.currentTimeMillis() / 1000): Int {
         val w = dao.appWorkoutOnce(start) ?: return 0
         val end = w.end ?: return 0
         val (from, to) = AutoHealthConnect.workoutRange(w.from, end, now)
-        val records = heartRate(from, to) + steps(from, to) + workouts(listOf(w))
+        val records = heartRate(from, to) + steps(from, to) + workouts(listOf(w)) + calories(w.from, end, now)
         records.chunked(500).forEach { client.insertRecords(it) }
         return records.size
+    }
+
+    /**
+     * Active kcal an hour and each finished full day's total ([CalorieRecords]) over the whole local days [from] to
+     * [to] are in, from the stored days, each only with its permission granted. A day worked out again can lose an
+     * hour or turn partial, so OpenStrap's old calorie records over those days go first, as its sleep does.
+     */
+    private suspend fun calories(from: Long, to: Long, now: Long): List<Record> {
+        val granted = client.permissionController.getGrantedPermissions()
+        val active = HealthPermission.getWritePermission(ActiveCaloriesBurnedRecord::class) in granted
+        val total = HealthPermission.getWritePermission(TotalCaloriesBurnedRecord::class) in granted
+        if (!active && !total) return emptyList()
+        val zone = ZoneId.systemDefault()
+        val (a, b) = CalorieRecords.days(from, to, zone)
+        val rows = dao.dailyEnergyOnce(a, b - 1)
+        val range = TimeRangeFilter.between(Instant.ofEpochSecond(a), Instant.ofEpochSecond(minOf(b, now)))
+        val records = mutableListOf<Record>()
+        if (active) {
+            client.deleteRecords(ActiveCaloriesBurnedRecord::class, range)
+            records += CalorieRecords.activeHours(rows, zone, now).map {
+                ActiveCaloriesBurnedRecord(
+                    startTime = Instant.ofEpochSecond(it.start), startZoneOffset = offset(it.start),
+                    endTime = Instant.ofEpochSecond(it.end), endZoneOffset = offset(it.end),
+                    energy = Energy.kilocalories(it.kcal), metadata = meta(it.id, it.version),
+                )
+            }
+        }
+        if (total) {
+            client.deleteRecords(TotalCaloriesBurnedRecord::class, range)
+            records += CalorieRecords.dayTotals(rows, zone, now).map {
+                TotalCaloriesBurnedRecord(
+                    startTime = Instant.ofEpochSecond(it.start), startZoneOffset = offset(it.start),
+                    endTime = Instant.ofEpochSecond(it.end), endZoneOffset = offset(it.end),
+                    energy = Energy.kilocalories(it.kcal), metadata = meta(it.id, it.version),
+                )
+            }
+        }
+        return records
     }
 
     /** Heart rate: one record per hour with all samples in it. */

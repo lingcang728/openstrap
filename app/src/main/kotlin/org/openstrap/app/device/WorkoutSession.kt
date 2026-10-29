@@ -482,9 +482,11 @@ class WorkoutSession(
                 }
                 // The route is still in memory here, kept or not, so a run gets its VO2max either way.
                 dao.upsertAppWorkout(withEffect(ended, dao.appWorkoutHeartRateOnce(w.start), _route.value))
-                onSaved(w.start)
                 _state.value = WorkoutState.Ended(w.start)
                 watchCalmDown(w.start, recorded)
+                // Its days' energy rows take its kcal now, after the summary is up, so Health Connect gets them with it.
+                refreshDays(ended.from, end)
+                onSaved(w.start)
             }
             // The strap's history fills any minutes the phone missed; it batches, so ask now.
             strap.syncNow()
@@ -555,6 +557,7 @@ class WorkoutSession(
                 val w = AppWorkout(start = from, end = to, sportType = sportType, source = AppWorkout.SOURCE_SUGGESTED, endReason = AppWorkout.END_USER)
                 dao.upsertAppWorkout(w)
                 WorkoutGapFill(dao) { settings.profile.first() }.fill(w)
+                refreshDays(from, to)
                 onSaved(w.start)
             }
         }
