@@ -152,7 +152,8 @@ class HistorySync(
             if (e is kotlinx.coroutines.CancellationException) throw e
             log("history failed: $e")
             // A wrapped system error's message is just its class name (android.os.DeadObjectException), not for the card.
-            val reason = e.message?.takeUnless { e.cause != null && it == e.cause.toString() }
+            // Whatever a call on a dropped link threw (a missing characteristic, a closed op), the cause is the link.
+            val reason = if (!gatt.connected.value) "The link to the strap dropped." else e.message?.takeUnless { e.cause != null && it == e.cause.toString() }
             state.value = SyncState.Failed(reason ?: "Sync failed")
         } finally {
             listeners.cancel()
