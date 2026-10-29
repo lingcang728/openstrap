@@ -58,6 +58,7 @@ class NotificationCopyTest {
         assertEquals(3, numbers(c))
         assertEquals("16 min in Zone 2–3", card(gps = false, target = WorkoutTarget.Zones(1, 2)).detail)
         assertEquals("Goal 30 min", card(gps = false, target = WorkoutTarget.Time(1800)).detail)
+        assertEquals("Goal 500 kcal", card(gps = false, target = WorkoutTarget.Kcal(500)).detail)
         // No reading, no zone time.
         assertNull(card(gps = false, bpm = null).detail)
     }
@@ -103,5 +104,21 @@ class NotificationCopyTest {
         val all = listOf(card(), card(paused = true), card(gps = false), card(connected = false), card(bpm = null), card(confirming = true))
             .flatMap { listOfNotNull(it.sport, it.bpm, it.zoneLine, it.detail, it.text) }
         all.forEach { s -> assertFalse(s, s.contains('·') || s.contains(';') || s.contains('—')) }
+    }
+
+    @Test fun `kcal goes after the time where it fits`() {
+        val c = NotificationCopy.card("Outdoor run", 1421, false, true, 152, 190, true, 4210f, false, null, zones, false, activeKcal = 286.4f)
+        assertEquals("286 kcal", c.kcal)
+        assertTrue(c.kcalCollapsed)
+        assertTrue(c.kcalExpanded)
+        // Its line stays the three figures it was.
+        assertEquals("152 bpm. Zone 4, threshold. 4.21 km", c.text)
+        // A long sport name leaves no room on the collapsed line; past the hour the expanded time row is full.
+        assertFalse(NotificationCopy.card("Indoor cycling", 1421, false, true, 152, 190, false, null, false, null, zones, false, activeKcal = 286f).kcalCollapsed)
+        assertFalse(NotificationCopy.card("Outdoor run", 3721, false, true, 152, 190, true, 4210f, false, null, zones, false, activeKcal = 1286f).kcalExpanded)
+        // Without a profile, nothing.
+        val none = card()
+        assertNull(none.kcal)
+        assertFalse(none.kcalCollapsed || none.kcalExpanded)
     }
 }

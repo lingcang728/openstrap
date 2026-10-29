@@ -105,8 +105,9 @@ class MomentWidget : LoadingWidget<MomentWidgetModel>(WidgetKind.Moment) {
             }
             // Workouts over the usual workout time's look-back, as Today's usual sport reads them.
             val from = t - MomentResolver.USUAL_WORKOUT_DAYS * 86_400L
-            val strap = read("workouts", emptyList()) { dao.workoutsOnce(from, t) }
             val phone = read("phone workouts", emptyList()) { dao.appWorkoutsOnce(from, t) }
+            // The strap's record of a phone workout is that workout, as in the lists ([Workouts.sameWorkout]).
+            val strap = read("workouts", emptyList()) { dao.workoutsOnce(from, t) }.filter { Workouts.phoneTwin(it, phone, t) == null }
             val yours = strap.filter { it.subtype != Workouts.SUBTYPE_AUTO_DETECTED && it.sportType != Workouts.GENERIC_ACTIVITY }.map { it.sportType to it.start } +
                 phone.filter { it.sportType != Workouts.GENERIC_ACTIVITY }.map { it.sportType to it.start }
             val all = strap.map { it.sportType to it.start } + phone.map { it.sportType to it.start }

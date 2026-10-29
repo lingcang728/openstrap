@@ -107,6 +107,15 @@ class WorkoutSession(
     val zoneSeconds: StateFlow<IntArray> = _zoneSeconds
     private var lastReading: Pair<Long, Int>? = null
 
+    /**
+     * Active and total kcal so far ([WorkoutRecorder.liveKcalTick]), worked out every [KCAL_TICK_MS] from the readings
+     * and steps so far, pauses left out; it never goes down. Null without weight, height and age.
+     */
+    private val _kcal = MutableStateFlow<WorkoutRecorder.Kcal?>(null)
+    val kcal: StateFlow<WorkoutRecorder.Kcal?> = _kcal
+    /** The strap's step totals over the whole workout, for its steps a minute until a sync brings the strap's own. */
+    private var stepTotals = listOf<Pair<Long, Int>>()
+
     /** The heart rate coming down after the last workout ended, while [CALM_S] lasts; null before any. */
     private val _calmDown = MutableStateFlow<CalmDown?>(null)
     val calmDown: StateFlow<CalmDown?> = _calmDown
@@ -179,6 +188,8 @@ class WorkoutSession(
                     val maxHr = maxHeartRate()
                     _zoneSeconds.value = WorkoutRecorder.liveZoneSeconds(live, maxHr)
                     lastReading = live.lastOrNull()
+                    _kcal.value = null
+                    stepTotals = emptyList()
                     synchronized(allReadings) { allReadings.clear(); allReadings.addAll(live) }
                     _history.value = live
                     window = live.filter { it.first >= now - STOP_WINDOW_S }
@@ -227,6 +238,9 @@ class WorkoutSession(
                 count = 0
                 _zoneSeconds.value = IntArray(org.openstrap.app.data.Workouts.ZONES)
                 lastReading = null
+                _kcal.value = null
+                // Auto-start: the strap's total where the effort began, so the steps since count.
+                stepTotals = listOfNotNull(seedSteps?.let { w.start to it })
                 window = emptyList()
                 askSince = w.start
                 minimized.value = false
@@ -353,10 +367,13 @@ class WorkoutSession(
         return ((last.second - first.second) * 60 / (last.first - first.first)).toInt().coerceAtLeast(0)
     }
 
-    fun pause() = update { w ->
+    fun pause() = pauseFrom(toStrap = true)
+
+    /** [toStrap] false when the strap paused its session itself, so it isn't told again. */
+    private fun pauseFrom(toStrap: Boolean) = update { w ->
         if (w.pausedAt != null) w else {
             flush()
-            w.copy(pausedAt = now()).also { strapState(org.openstrap.protocol.services.SportSession.State.PAUSE, it) }
+            w.copy(pausedAt = now()).also { strapState(org.openstrap.protocol.services.SportSession.State.PAUSE, it, send = toStrap) }
         }
     }
 
@@ -368,29 +385,33 @@ class WorkoutSession(
     }
 
     /** A pause doesn't count as time in zone. */
-    fun resume() = update { w ->
+    fun resume() = resumeFrom(toStrap = true)
+
+    private fun resumeFrom(toStrap: Boolean) = update { w ->
         lastReading = null
-        (w.pausedAt?.let { w.withPause(it, now()) } ?: w).also { if (it != w) strapState(org.openstrap.protocol.services.SportSession.State.RESUME, it) }
+        (w.pausedAt?.let { w.withPause(it, now()) } ?: w).also { if (it != w) strapState(org.openstrap.protocol.services.SportSession.State.RESUME, it, send = toStrap) }
     }
 
-    /* --------------------------- The strap's own session (experimental, 0x0019) --------------------------- */
+    /* ---------------------------------- The strap's own session (0x0019) ---------------------------------- */
 
     /*
-     * TODO (deferred): run phone-started workouts on the strap in full. Untried on hardware; still missing are
-     * 0x0019 `04` live SportInfo, `06` status query and `20` strap-initiated start, plus phone GPS fixes to the
-     * strap over 0x0031 (codemap 05 §5, 03 §3.20). First test whether the strap answers the version query and then
-     * syncs a subtype-6 summary with its own TE/load; if it does, merge that with the phone's recording by trackId.
+     * TODO (deferred): the rest of Zepp's session. Still missing are 0x0019 `04` live SportInfo (Zepp's high heart
+     * rate buzz), `06` status query and `20` strap-initiated start, plus phone GPS fixes to the strap over 0x0031
+     * (codemap 05 §5, 03 §3.20). The strap's own pause and stop (`11`) and ABANDON are followed but untried on hardware.
      */
 
-    /** Read at each start: whether a phone workout also runs a session on the strap. */
-    @Volatile private var strapSessions = false
+    /** Read at each start: whether a phone workout also runs a session on the strap ([SettingsStore.strapSessions]). */
+    @Volatile private var strapSessions = true
     private var keepAlive: Job? = null
 
-    /** Tells the strap's sport module, when that's on; a failure is logged and the phone recording carries on. */
-    private fun strapState(state: org.openstrap.protocol.services.SportSession.State, w: AppWorkout) {
+    /**
+     * Tells the strap's sport module, when that's on; a failure is logged and the phone recording carries on. [send]
+     * false when the strap made the change itself: nothing goes out, but a pause still gets its keep-alive.
+     */
+    private fun strapState(state: org.openstrap.protocol.services.SportSession.State, w: AppWorkout, send: Boolean = true) {
         if (!strapSessions) return
         val elapsed = WorkoutRecorder.activeSeconds(w, now())
-        scope.launch {
+        if (send) scope.launch {
             runCatching { strap.sportSession(state, w.sportType, w.start, elapsed) }
                 .onFailure { (strap as? StrapManager)?.log("strap session $state not sent: ${it.message}") }
         }
@@ -404,9 +425,22 @@ class WorkoutSession(
         }
     }
 
-    /** The strap's pushes: "heart rate back to normal" asks the same question as [checkStopped]. */
+    /**
+     * The strap's pushes: a pause, resume or stop it made itself is followed ([WorkoutRecorder.strapAction]), and "heart
+     * rate back to normal" asks the same question as [checkStopped].
+     */
     private fun onStrapPush(p: org.openstrap.protocol.services.SportSession.Push) {
         val r = _state.value as? WorkoutState.Recording ?: return
+        if (p is org.openstrap.protocol.services.SportSession.Push.StateChanged) {
+            val action = WorkoutRecorder.strapAction(p.state, r.paused) ?: return
+            (strap as? StrapManager)?.log("strap session: the strap sent ${p.state}, workout follows")
+            when (action) {
+                WorkoutRecorder.StrapAction.PAUSE -> pauseFrom(toStrap = false)
+                WorkoutRecorder.StrapAction.RESUME -> resumeFrom(toStrap = false)
+                WorkoutRecorder.StrapAction.END -> finish(null, AppWorkout.END_USER, toStrap = false)
+            }
+            return
+        }
         if (p is org.openstrap.protocol.services.SportSession.Push.Status && p.status == org.openstrap.protocol.services.SportSession.STATUS_HR_NORMAL) {
             if (r.paused || !r.workout.askToEnd || r.endPrompt != null) return
             val at = WorkoutRecorder.lastActive(window, steps, restingHr, r.maxHeartRate)?.takeIf { it > r.workout.start } ?: now()
@@ -431,7 +465,8 @@ class WorkoutSession(
         if (r.endPrompt != null) _state.value = r.copy(endPrompt = null, inCar = false)
     }
 
-    private fun finish(at: Long?, reason: Int) {
+    /** [toStrap] false when the strap ended its session itself. */
+    private fun finish(at: Long?, reason: Int, toStrap: Boolean = true) {
         scope.launch {
             lock.withLock {
                 val r = _state.value as? WorkoutState.Recording ?: return@withLock
@@ -444,7 +479,8 @@ class WorkoutSession(
                 offerNotBefore = now()
                 val end = at?.coerceIn(w.start, recorded) ?: recorded
                 val ended = w.copy(end = end, pausedAt = null, endReason = reason, recordedEnd = recorded.takeIf { it > end })
-                strapState(org.openstrap.protocol.services.SportSession.State.STOP, w)
+                val kept = WorkoutRecorder.activeSeconds(ended, end) >= MIN_SAVED_S
+                strapState(WorkoutRecorder.closingState(kept), w, send = toStrap)
                 keepAlive?.cancel()
                 // A set or rest under way closes with the workout.
                 r.sets.lastOrNull()?.let { last ->
@@ -456,7 +492,7 @@ class WorkoutSession(
                 }?.let { dao.upsertSets(listOf(it)) }
                 stop(keepLive = true)
                 // Under a minute is a mis-tap or a test, not a workout: nothing is kept, and the app says so.
-                if (WorkoutRecorder.activeSeconds(ended, end) < MIN_SAVED_S) {
+                if (!kept) {
                     strap.setWorkoutActive(false)
                     dao.deleteAppWorkout(w.start)
                     _state.value = WorkoutState.Idle
@@ -468,20 +504,33 @@ class WorkoutSession(
                 }
                 // The route is still in memory here, kept or not, so a run gets its VO2max either way.
                 dao.upsertAppWorkout(withEffect(ended, dao.appWorkoutHeartRateOnce(w.start), _route.value))
-                onSaved(w.start)
                 _state.value = WorkoutState.Ended(w.start)
                 watchCalmDown(w.start, recorded)
+                // Its days' energy rows take its kcal now, after the summary is up, so Health Connect gets them with it.
+                refreshDays(ended.from, end)
+                onSaved(w.start)
             }
             // The strap's history fills any minutes the phone missed; it batches, so ask now.
             strap.syncNow()
         }
     }
 
-    /** Deletes a phone workout, and closes its summary if it is the one showing. */
+    /**
+     * Deletes a phone workout, and closes its summary if it is the one showing. The strap's own records of it
+     * ([Workouts.strapTwins]) go too, as they show as this one: left, they would come back as a workout of their own.
+     */
     fun discard(start: Long) {
         scope.launch {
             lock.withLock {
+                val w = dao.appWorkoutOnce(start)
+                if (w?.end != null) {
+                    val t = now()
+                    val range = org.openstrap.app.data.Workouts.phoneRange(w, t)
+                    org.openstrap.app.data.Workouts.strapTwins(dao.workoutsOnce(range.first, range.last), range)
+                        .forEach { dao.deleteStrapWorkout(it.start, t) }
+                }
                 dao.deleteAppWorkout(start)
+                if (w?.end != null) refreshDays(w.start, w.recordedEnd ?: w.end)
                 if ((_state.value as? WorkoutState.Ended)?.start == start) {
                     _state.value = WorkoutState.Idle
                     endCalmDown()
@@ -539,6 +588,7 @@ class WorkoutSession(
                 val w = AppWorkout(start = from, end = to, sportType = sportType, source = AppWorkout.SOURCE_SUGGESTED, endReason = AppWorkout.END_USER)
                 dao.upsertAppWorkout(w)
                 WorkoutGapFill(dao) { settings.profile.first() }.fill(w)
+                refreshDays(from, to)
                 onSaved(w.start)
             }
         }
@@ -614,12 +664,19 @@ class WorkoutSession(
             lock.withLock {
                 val w = dao.appWorkoutOnce(start)?.takeIf { it.end != null } ?: return@withLock
                 val changed = change(w)
-                if (changed != w) {
-                    dao.upsertAppWorkout(withEffect(changed, dao.appWorkoutHeartRateOnce(start)))
-                    onSaved(start)
-                }
+                if (changed == w) return@withLock
+                dao.upsertAppWorkout(withEffect(changed, dao.appWorkoutHeartRateOnce(start)))
+                // Its kcal moved, so its days' energy rows follow: over all it was recorded, which holds both ranges.
+                refreshDays(w.start, w.recordedEnd ?: w.end ?: start)
+                onSaved(start)
             }
         }
+    }
+
+    /** Writes the daily energy rows from [from] to [to] again ([org.openstrap.app.data.DailyEnergyHistory.updateDays]). */
+    private suspend fun refreshDays(from: Long, to: Long) {
+        runCatching { org.openstrap.app.data.DailyEnergyHistory(dao).updateDays(from, to, settings.profile.first()) }
+            .onFailure { (strap as? StrapManager)?.log("daily energy not refreshed: ${it.message}") }
     }
 
     /**
@@ -712,8 +769,8 @@ class WorkoutSession(
         // Waited for, so the calm down's own switch-off can't land after this workout turns the stream on.
         calmJob?.cancelAndJoin()
         calmJob = null
-        coach = org.openstrap.app.data.Coach(org.openstrap.app.data.WorkoutTarget.parse(w.target))
-        strapSessions = runCatching { settings.strapSessions.first() }.getOrDefault(false)
+        coach = org.openstrap.app.data.Coach(org.openstrap.app.data.WorkoutTarget.parse(w.target), w.targetReachedAt)
+        strapSessions = runCatching { settings.strapSessions.first() }.getOrDefault(true)
         heightCm = runCatching { settings.profile.first().heightCm }.getOrNull()
         if (w.useGps) location.start()
         _state.value = WorkoutState.Recording(w, maxHr)
@@ -746,9 +803,11 @@ class WorkoutSession(
                     s ?: return@collect
                     val t = now()
                     steps = (steps + (t to s.steps)).dropWhile { it.first < t - STOP_WINDOW_S }
+                    stepTotals = stepTotals + (t to s.steps)
                     if (firstSteps == null) firstSteps = s.steps
                 }
             }
+            launch { countKcal(w, maxHr) }
             // Strength rest is timed to the second, not to the flush.
             if (w.sportType in org.openstrap.app.data.Strength.SPORTS) launch {
                 while (isActive) {
@@ -764,6 +823,47 @@ class WorkoutSession(
                 _history.value = synchronized(allReadings) { allReadings.toList() }
                 if (++tick % STOP_CHECK_TICKS == 0) checkStopped()
             }
+        }
+    }
+
+    /**
+     * The live kcal, every [KCAL_TICK_MS] while [w] records. Resting HR and VO2max are read once, by the rules the saved
+     * workout's kcal uses ([org.openstrap.app.data.WorkoutEffectEngine]), so the figure at the end is about the one
+     * saved. Minutes a history fill wrote and the strap's own step minutes are read again every [KCAL_READ_TICKS].
+     */
+    private suspend fun countKcal(w: AppWorkout, maxHr: Int) {
+        val profile = runCatching { settings.profile.first() }.getOrNull() ?: return
+        if (org.openstrap.app.data.EnergyExpenditure.bmrPerMinute(profile, profile.age()) == null) return
+        val zone = java.time.ZoneId.systemDefault()
+        val date = java.time.Instant.ofEpochSecond(w.from).atZone(zone).toLocalDate()
+        val resting = runCatching { org.openstrap.app.data.WorkoutEffectEngine(dao).restingHr(w.from, zone) }.getOrDefault(DEFAULT_RESTING_HR.toFloat())
+        val vo2 = runCatching { RecoveryEngine(dao).vo2max(profile, date, zone) }.getOrNull()
+        var history = emptyList<AppWorkoutHeartRate>()
+        var synced = emptyMap<Long, Int>()
+        var tick = 0
+        while (true) {
+            val r = _state.value as? WorkoutState.Recording ?: return
+            if (r.workout.start != w.start) return
+            val t = now()
+            if (tick++ % KCAL_READ_TICKS == 0) {
+                history = runCatching { dao.appWorkoutHeartRateOnce(w.start).filter { it.fromHistory } }.getOrDefault(history)
+                synced = runCatching {
+                    dao.activityOnce(r.workout.from - 60, t + 60).filter { it.steps in 0..250 }.associate { it.timestamp / 60 * 60 to it.steps }
+                }.getOrDefault(synced)
+            }
+            val live = synchronized(allReadings) { allReadings.toList() }
+            _kcal.value = runCatching {
+                WorkoutRecorder.liveKcalTick(
+                    r.workout, live, history, stepTotals, synced, resting, maxHr.toFloat(), profile, profile.age(date), vo2, t, _kcal.value,
+                )
+            }.getOrDefault(_kcal.value)
+            // A kcal target buzzes once, the first time the figure reaches it; when is kept for the summary.
+            val active = _kcal.value?.active
+            if (active != null && !r.paused) coach.kcal(t, active)?.let { c ->
+                cue(c)
+                update { it.copy(targetReachedAt = t) }
+            }
+            delay(KCAL_TICK_MS)
         }
     }
 
@@ -873,6 +973,10 @@ class WorkoutSession(
 
     internal companion object {
         const val FLUSH_MS = 10_000L
+        /** The live kcal is worked out again this often. */
+        const val KCAL_TICK_MS = 5_000L
+        /** History minutes and the strap's step minutes are read again every sixth kcal tick, 30 s. */
+        const val KCAL_READ_TICKS = 6
         const val RECENT_S = 600L
         /** Workouts with less moving time than this aren't kept. */
         const val MIN_SAVED_S = 60L

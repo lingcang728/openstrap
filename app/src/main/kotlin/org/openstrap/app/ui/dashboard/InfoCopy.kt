@@ -300,11 +300,14 @@ object InfoCopy {
         )
         Score.Energy -> Info(
             "Calories",
-            "The energy your body uses in a day, at rest and moving, in kilocalories (kcal). An estimate.",
+            "Active kcal are what moving burned on top of your body's use at rest. The total adds that rest. Both are estimates, in kilocalories (kcal).",
             emptyList(),
             how = "Your body's use at rest comes from your weight, height, age and sex (Mifflin-St Jeor). On top of it " +
-                "come your steps each minute and, for effort without steps, your heart rate. A recorded workout uses " +
-                "its own kcal. Sleep counts at a little under resting.",
+                "come your steps each minute and, for effort without steps, your heart rate. A workout recorded in " +
+                "OpenStrap counts its own minutes from your heart rate and steps, the same figure its page shows. A " +
+                "strap workout uses the strap's kcal. Sleep counts at a little under resting. Active is the total less " +
+                "your use at rest for each minute worn, never below zero, so sleep takes nothing away. Your goal is in " +
+                "active kcal, as the strap's is.",
             moves = "Moving more raises it, most of all workouts. A heavier body uses more at rest and in motion.",
             off = "Food digestion isn't included. It only covers the minutes the strap was worn, so a day with it off " +
                 "for hours reads low. A profile out of date throws the resting part.",

@@ -180,8 +180,15 @@ interface HealthDao {
     suspend fun insertAppWorkouts(workouts: List<AppWorkout>)
 
     /** Only a workout's effect figures, so working them out for an old workout can't undo a trim made meanwhile. */
-    @Query("UPDATE app_workout SET epoc = :epoc, aerobicTrainingEffect = :aerobicTe, recoveryMinutes = :recoveryMinutes, vo2max = :vo2max WHERE start = :start")
-    suspend fun updateAppWorkoutEffect(start: Long, epoc: Float?, aerobicTe: Float?, recoveryMinutes: Int?, vo2max: Float?)
+    @Query("UPDATE app_workout SET epoc = :epoc, aerobicTrainingEffect = :aerobicTe, recoveryMinutes = :recoveryMinutes, vo2max = :vo2max, anaerobicTrainingEffect = :anaerobicTe, effectFromStrap = :fromStrap, ownRecoveryMinutes = :ownRecoveryMinutes WHERE start = :start")
+    suspend fun updateAppWorkoutEffect(
+        start: Long, epoc: Float?, aerobicTe: Float?, recoveryMinutes: Int?, vo2max: Float?, anaerobicTe: Float? = null, fromStrap: Boolean = false,
+        ownRecoveryMinutes: Int? = null,
+    )
+
+    /** Only a workout's average and peak heart rate, for the strap's own record of it ([updateAppWorkoutEffect]). */
+    @Query("UPDATE app_workout SET averageHeartRate = :average, maxHeartRate = :max WHERE start = :start")
+    suspend fun updateAppWorkoutHeartRateStats(start: Long, average: Int?, max: Int?)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAppWorkoutHeartRate(samples: List<AppWorkoutHeartRate>)
@@ -560,6 +567,22 @@ interface HealthDao {
 
     @Query("SELECT * FROM night_metrics WHERE day BETWEEN :from AND :to ORDER BY day")
     suspend fun nightMetricsOnce(from: Long, to: Long): List<NightMetricsRow>
+
+    // Each day's energy as last worked out, for the history views and the export.
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDailyEnergy(rows: List<DailyEnergyRow>)
+
+    @Query("SELECT * FROM daily_energy WHERE day BETWEEN :from AND :to ORDER BY day")
+    suspend fun dailyEnergyOnce(from: Long, to: Long): List<DailyEnergyRow>
+
+    @Query("SELECT * FROM daily_energy WHERE day BETWEEN :from AND :to ORDER BY day")
+    fun dailyEnergy(from: Long, to: Long): Flow<List<DailyEnergyRow>>
+
+    @Query("SELECT day FROM daily_energy")
+    suspend fun dailyEnergyDaysOnce(): List<Long>
+
+    @Query("UPDATE app_workout SET activeKcal = :activeKcal, totalKcal = :totalKcal WHERE start = :start")
+    suspend fun updateAppWorkoutKcal(start: Long, activeKcal: Float?, totalKcal: Float?)
 
     @Query("SELECT * FROM strap_readiness WHERE day BETWEEN :from AND :to ORDER BY day")
     suspend fun strapReadinessOnce(from: Long, to: Long): List<StrapReadinessRow>

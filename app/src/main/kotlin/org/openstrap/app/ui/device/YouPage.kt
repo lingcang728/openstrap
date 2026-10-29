@@ -27,8 +27,8 @@ import org.openstrap.app.ui.theme.AppIcons
 /** "7 h 30", or "8 h" on the hour. */
 fun hoursMinutes(minutes: Int): String = if (minutes % 60 == 0) "${minutes / 60} h" else "${minutes / 60} h ${"%02d".format(minutes % 60)}"
 
-/** The Goals row's value: "8,000 steps, 8 active hours". */
-fun goalsLine(goals: Goals): String = "%,d steps, %d active hours".format(goals.steps, goals.activeHours)
+/** The Goals row's value: "8,000 steps, 300 active kcal, 8 active hours". */
+fun goalsLine(goals: Goals): String = "%,d steps, %,d active kcal, %d active hours".format(goals.steps, goals.calories, goals.activeHours)
 
 /** The Sleep goal row's value, with the sleep need Recovery uses beside it: "7 h 30. Your sleep need is 8 h". */
 fun sleepGoalLine(goals: Goals, needMinutes: Int): String =

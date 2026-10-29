@@ -32,8 +32,18 @@ class WorkoutEffectTest {
     @Test
     fun easyHalfHourIsALowTrainingEffect() {
         val r = effect(easy)
-        assertTrue("TE ${r.aerobicTe}", r.aerobicTe!! in 1.5f..2.5f)
-        assertTrue("EPOC ${r.epoc}", r.epoc!! in 10f..25f)
+        assertTrue("TE ${r.aerobicTe}", r.aerobicTe!! in 2.0f..2.8f)
+        assertTrue("EPOC ${r.epoc}", r.epoc!! in 20f..40f)
+    }
+
+    @Test
+    fun anEasyWalkLandsNearTheStrapsOwnAndKeepsAdding() {
+        // The strap's own record of a walk: 37 min at 117 bpm, resting 70 and max 187 (HRR 0.4), EPOC 16.3.
+        fun walk(minutes: Int) = List(minutes * 60) { (start + it) to 117 }
+        fun epoc(minutes: Int) = WorkoutEffect.compute(3, walk(minutes), start, start + minutes * 60L, emptyList(), emptyList(), 70f, 187f, 0f, null).epoc!!
+        assertTrue("EPOC ${epoc(37)}", epoc(37) in 12f..20f)
+        // Nothing clears during it: the same pace for 106 minutes gives near three times as much.
+        assertEquals(106f / 37f, epoc(106) / epoc(37), 0.05f)
     }
 
     @Test
@@ -69,14 +79,16 @@ class WorkoutEffectTest {
         val minutes = listOf(5f, 15f, 40f, 80f, 120f, 180f).map { e -> WorkoutEffect.recoveryMinutes(WorkoutEffect.aerobicTe(e, 100, 50), null) }
         minutes.zipWithNext().forEach { (a, b) -> assertTrue("$minutes", b > a) }
         assertEquals(72 * 60, WorkoutEffect.recoveryMinutes(5f, null))
+        // Near the strap's own 11 h for a walk at aerobic TE 2.1.
+        assertEquals(11f * 60, WorkoutEffect.recoveryMinutes(2.1f, null).toFloat(), 30f)
     }
 
     @Test
     fun fatigueLengthensRecoveryAndLeftoverRecoveryCarries() {
         val fresh = WorkoutEffect.recoveryMinutes(3f, Recovery.LoadTrend(ctl = 20f, atl = 20f, form = 0f))
         val tired = WorkoutEffect.recoveryMinutes(3f, Recovery.LoadTrend(ctl = 20f, atl = 40f, form = 0f))
-        assertEquals(28 * 60, fresh)
-        assertEquals(35 * 60, tired)
+        assertEquals(20 * 60, fresh)
+        assertEquals(25 * 60, tired)
         assertEquals(40 * 60, WorkoutEffect.recoveryMinutes(1f, null, carriedMinutes = 40 * 60))
     }
 

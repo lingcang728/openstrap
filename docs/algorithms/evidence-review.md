@@ -254,7 +254,8 @@ Mifflin-St Jeor came within 10 % of measured resting metabolic rate in more peop
 
 | Minute | kcal/min |
 |---|---|
-| In a device workout | device kcal, pro-rated |
+| In a phone workout | the workout's own kcal for that minute (below) |
+| In a strap workout | the strap's kcal, pro-rated |
 | Asleep | 0.95·b |
 | ≥ 60 steps | b + net(cadence MET) |
 | Some steps, or a neighbouring minute had steps | 1.3·b |
@@ -264,6 +265,9 @@ Mifflin-St Jeor came within 10 % of measured resting metabolic rate in more peop
 * HR branch, labelled "HR-assisted": awake, not in a workout, < 20 steps, ≥ 10 minutes in a row with x ≥ 0.40 → max(EE, b + net(min(6, 1 + x·(VO2max_est/3.5 − 1)))).
 * The daily total is "partial" below 20 h of wear. Flag PAL = TEE/BMR outside 1.2–2.5. No thermic effect of food unless stated.
 * 0.95, 1.15 and 1.3 are conventions, not 2024 Compendium values (sleeping and sitting quietly are both 1.0 there, [pacompendium.com](https://pacompendium.com/inactivity)).
+* *Active kcal* = Σ max(0, EE − b) over the minutes with data: what you burned above resting, the same definition as Apple's and Zepp's "active". Sleep minutes (0.95·b) are held at zero, so sleeping never subtracts. The day also keeps it per local hour, split by source: workout minutes, walking minutes (≥ 60 steps outside a workout, cadence or running MET) and everyday (the rest, HR-assisted minutes included).
+* *Phone workouts (design choice):* each active minute (minute start inside the shown range, pauses left out) takes max(motion, HR). Motion is the table above without the sleep row. HR is b + net(1 + x·(VO2max_est/3.5 − 1)) per heart rate sample, capped at 0.9·VO2max_est/3.5 METs rather than 6, and averaged over the minute; history minutes filled after a disconnect count the same way, spread over their minute. No 10-minute rule inside a workout. Every minute is then at least 1.15·b, so the workout's active kcal is its total less b per minute. Saved on the workout when it ends and again after a trim or a gap fill. The day uses these minutes with their active part scaled to the saved total, so a day and its workout always agree, even after a sync moves the steps or resting HR they were worked out with. While recording, a running total counts the minutes ended and the share gone of the one under way, and never goes down.
+* *Daily history:* each day's totals, active, BMR, minutes with data, partial, workout and walking active kcal, and 24 hourly active values are kept in `daily_energy`. The day shown in the app rewrites its row; after each sync the last 7 days, any day without a row, and every day after a profile change are worked out again, on the strap's daily resting HR, today's max HR and that week's VO2max (these only move HR-assisted minutes).
 
 ### MVPA (Established thresholds)
 

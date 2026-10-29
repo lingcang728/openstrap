@@ -610,17 +610,20 @@ Your estimate is compared with the treadmill reference table for your age decade
 
 ### Training effect, EPOC, recovery and VO2max for phone workouts
 
-The strap works these out for the workouts it records. Zepp works them out for app workouts with neural networks whose weights are its own (analysis `native/04` §1), so OpenStrap uses open methods on the same scales. Code: `WorkoutEffect.kt`, fed by `WorkoutEffectEngine.kt`. Worked out when a workout ends, again after a trim or a gap fill, and for older workouts the first time their summary is opened.
+The strap works these out for the workouts it records. Zepp works them out for app workouts with neural networks whose weights are its own (analysis `native/04` §1), so OpenStrap uses open methods on the same scales. Code: `WorkoutEffect.kt`, fed by `WorkoutEffectEngine.kt`. Worked out when a workout ends, again after a trim or a gap fill, for older workouts the first time their summary is opened, and for every workout once when the model changes (`WorkoutEffect.MODEL`).
+
+**The strap's own figures come first.** When the strap kept a record of nearly all of a phone workout (at least 90 % of it, as a session it ran alongside does), the workout takes the strap's EPOC, aerobic and anaerobic training effect and recovery time instead of the model's, after the sync that brings them (`WorkoutEffectEngine.strapEffect`). A record the strap only started partway through, as an auto-detected one, covers too little and the model stands. The rest of this section is that model.
 
 **Epochs.** Heart rate in 5-second epochs, each read as the median of its readings between 40 and 220 bpm, as Zepp does. An epoch with no reading keeps the last one twice, then counts as missing: a dropout neither adds load nor clears it.
 
-**EPOC (ml/kg), shown as EPOC.** Built up epoch by epoch from heart-rate reserve x (0 at resting, 1 at max; resting and max HR from section 4), the structure Firstbeat describes (EPOC as a running function of its last value, intensity and time, with %VO2max from %HRR):
+**EPOC (ml/kg), shown as EPOC.** Added up epoch by epoch from heart-rate reserve x (0 at resting, 1 at max; resting and max HR from section 4). As in Zepp's own model (analysis `native/04` §4.2) it only adds, nothing clearing during the workout:
 
-EPOC ← EPOC + [0.01 × (e^(7x) − 1) − 0.034 × (1 − x) × EPOC] × minutes
+EPOC ← EPOC + 0.077 × (e^(4.5x) − 1) × minutes
 
-* The first term rises steeply with intensity, as EPOC does (Børsheim & Bahr 2003). The second clears EPOC at Energy's rate at rest (×0.966 a minute, half-life about 20 minutes) and not at all at max.
-* The workout's EPOC is the peak, shown as a whole number labelled "EPOC", as the strap's is, so the two compare. It is the workout's effect figure, not daily load: daily load is TRIMP only (section 8).
-* 0.01 and 7 are OpenStrap's own fit to these points: 30 easy minutes at 60 % HRR ≈ 16; an hour at 65 % ≈ 40; six 3-minute intervals at 92 % ≈ 110; an hour at 85 % ≈ 200.
+* The share rises steeply with intensity, as EPOC does (Børsheim & Bahr 2003), and grows with duration.
+* The workout's EPOC is the total, shown as a whole number labelled "EPOC", as the strap's is, so the two compare. It is the workout's effect figure, not daily load: daily load is TRIMP only (section 8).
+* 0.077 is fitted to the strap's own EPOC on three of its workouts with the same heart rate (37 minutes at 117 bpm gave 16.3, 9 minutes at 119 gave 6), all easy; 4.5 keeps harder work where it was aimed: 30 minutes at 60 % HRR ≈ 31 (TE 2.5), six 3-minute intervals at 92 % ≈ TE 3.7, an hour at 85 % at TE 5.
+* An earlier version (until `WorkoutEffect.MODEL` 2) let EPOC clear as it went and took its peak. It held a long easy walk to about a third of the strap's figure.
 
 **Aerobic training effect (0–5).** EPOC against Zepp's breakpoints for your activity class (analysis `native/04` §4.4–4.5), joined by straight lines and rounded down to a tenth:
 
@@ -642,7 +645,7 @@ EPOC ← EPOC + [0.01 × (e^(7x) − 1) − 0.034 × (1 − x) × EPOC] × minut
 
 **Anaerobic training effect** is not worked out ("—"). Zepp's comes from another network; heart rate alone lags short efforts too much for an open model to hold up.
 
-**Recovery time.** From aerobic TE, joined by straight lines: TE 1 → 6 h, 2 → 16 h, 3 → 28 h, 4 → 48 h, 5 → 72 h.
+**Recovery time.** From aerobic TE, joined by straight lines: TE 1 → 5 h, 2 → 10 h, 3 → 20 h, 4 → 40 h, 5 → 72 h. TE 2 sits by the strap's own 11 h for a walk at TE 2.1; the rest keeps the shape.
 
 * Up to 25 % longer when fatigue runs ahead of fitness: × (1 + 0.25 × (ATL − CTL) ÷ CTL), kept between ×1 and ×1.25, with CTL at least 5. Fitness and fatigue are section 8's 42/7-day model run over daily workout EPOC.
 * Never less than what an earlier workout (phone or strap) still has to run, as Zepp's own rule. Never more than 72 h.

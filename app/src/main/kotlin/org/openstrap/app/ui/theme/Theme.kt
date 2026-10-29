@@ -33,6 +33,13 @@ object MetricColors {
     val readiness = Color(0xFF7CF2C9)
     /** Charge: Ember orange on every surface, whatever the level. */
     val charge = Color(0xFFF66C28)
+    /**
+     * Calories: Gold (hue 48), between Charge's orange and Steps' lime and lighter than the warning amber, so Calories
+     * and Steps read as two metrics side by side on Activity.
+     */
+    val calories = Color(0xFFFFD23F)
+    /** Calories' darker shade, for walking beside workouts in the hourly bars: a part of the same metric, not a second one. */
+    val caloriesShade = Color(0xFF8C7314)
     /** Load: violet, apart from Sleep's blues and REM's purple. */
     val load = Color(0xFFA78BFA)
     /** Habit Age: orchid. */

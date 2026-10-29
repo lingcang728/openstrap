@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The workout notification expanded: time and bpm, the zone and one more figure, the flat zone strip. -->
+<!-- The workout notification expanded: time, kcal where it fits and bpm, the zone and one more figure, the flat zone strip. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/card"
     android:layout_width="match_parent"
@@ -16,14 +16,24 @@
 
         <Chronometer
             android:id="@+id/time"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:fontFamily="sans-serif-medium"
             android:fontFeatureSettings="tnum"
             android:maxLines="1"
             android:textColor="#FFFFFFFF"
             android:textSize="30sp" />
+
+        <TextView
+            android:id="@+id/kcal"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:fontFeatureSettings="tnum"
+            android:maxLines="1"
+            android:textColor="#B3FFFFFF"
+            android:textSize="15sp" />
 
         <TextView
             android:id="@+id/bpm"

@@ -5,6 +5,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.openstrap.app.data.WorkoutTarget
 import org.openstrap.app.data.Workouts
 import org.openstrap.app.ui.dashboard.Info
 import org.openstrap.app.ui.dashboard.TodayCopy
@@ -21,8 +22,8 @@ import org.openstrap.app.ui.glow.workoutClock
 /** A small fact on the workout's list: [name], [value] in dot-matrix digits, and the [status] under the name. */
 data class WorkoutFact(val name: String, val value: String, val status: String?)
 
-/** What a workout's other figures look like, for the strap's own record of a phone workout. */
-data class EffectFigures(val aerobic: Float?, val anaerobic: Float?, val load: Int?, val recoveryMinutes: Int?)
+/** What a workout's other figures look like, for the strap's own record of a phone workout; [from] its start, "22:53". */
+data class EffectFigures(val aerobic: Float?, val anaerobic: Float?, val load: Int?, val recoveryMinutes: Int?, val from: String? = null)
 
 /** The (i) on the Load card: the sheet's words, the bar of the 0 to 5 scale this workout is in, and its folded rows. */
 data class EffectSheet(val info: Info, val here: Int?, val hereLine: String?, val rows: List<Pair<String, String>>)
@@ -97,9 +98,13 @@ object WorkoutDetailCopy {
 
     /**
      * The workout's small facts, each left out when there's nothing to say: distance (from GPS, or estimated from
-     * steps), time paused past [MIN_PAUSED_S], steps and energy.
+     * steps), time paused past [MIN_PAUSED_S], steps and calories. Calories lead with [activeKcal] and say the total
+     * [calories] under it (calories spec 4.2); without an active figure of its own the total stands alone, in kcal.
      */
-    fun facts(meters: Float?, fromSteps: Boolean, pausedSeconds: Long, steps: Int?, calories: Int?, locale: Locale = Locale.getDefault()): List<WorkoutFact> =
+    fun facts(
+        meters: Float?, fromSteps: Boolean, pausedSeconds: Long, steps: Int?, calories: Int?, activeKcal: Int? = null,
+        locale: Locale = Locale.getDefault(),
+    ): List<WorkoutFact> =
         listOfNotNull(
             meters?.takeIf { it >= 10f }?.let { m ->
                 val unit = if (m >= 1000) "Kilometres" else "Metres"
@@ -107,8 +112,26 @@ object WorkoutDetailCopy {
             },
             pausedSeconds.takeIf { it >= MIN_PAUSED_S }?.let { WorkoutFact("Paused", workoutClock(it), "Not counted in the time") },
             steps?.takeIf { it > 0 }?.let { WorkoutFact("Steps", "%,d".format(locale, it), null) },
-            calories?.takeIf { it > 0 }?.let { WorkoutFact("Calories", it.toString(), "kcal") },
+            calories?.takeIf { it > 0 }?.let { total ->
+                if (activeKcal != null && activeKcal != total) WorkoutFact("Calories", "%,d".format(locale, activeKcal), "Total %,d".format(locale, total))
+                else WorkoutFact("Calories", "%,d".format(locale, total), "kcal")
+            },
         )
+
+    /**
+     * A kcal target as a fact, after Calories: "300 kcal" with "Reached at 24:40" ([reachedSeconds]), "Reached" when it
+     * got there without a time, or "Not reached, 212 of 300" from [activeKcal]. Null for no target or another kind.
+     */
+    fun targetFact(target: String?, reachedSeconds: Long?, activeKcal: Int?, locale: Locale = Locale.getDefault()): WorkoutFact? {
+        val k = WorkoutTarget.parse(target) as? WorkoutTarget.Kcal ?: return null
+        val status = when {
+            reachedSeconds != null -> "Reached at ${workoutClock(reachedSeconds)}"
+            activeKcal != null && activeKcal >= k.kcal -> "Reached"
+            activeKcal != null -> "Not reached, %,d of %,d".format(locale, activeKcal, k.kcal)
+            else -> "Not reached"
+        }
+        return WorkoutFact("Target", "%,d kcal".format(locale, k.kcal), status)
+    }
 
     /**
      * The Load card's heart rate drop line: "Heart rate drop 34 bpm in the first minute, quick for you." Only after a
@@ -140,14 +163,35 @@ object WorkoutDetailCopy {
     private fun one(x: Float) = String.format(Locale.ROOT, "%.1f", x)
 
     /**
+     * The strap's own records of a phone workout, in the sheet: one's figures, or each of several by its start, so a
+     * long workout that held two shows both. Empty when there are none, or none with figures.
+     */
+    private fun strapLine(strap: List<EffectFigures>): String {
+        fun figures(s: EffectFigures) = listOfNotNull(
+            s.aerobic?.let { "aerobic ${one(it)}" }, s.anaerobic?.let { "anaerobic ${one(it)}" }, s.load?.let { "Load $it" },
+            SummaryCopy.recoverSpan(s.recoveryMinutes)?.let { "time to recover $it" },
+        ).joinToString(", ")
+        val each = strap.map { it to figures(it) }.filter { it.second.isNotEmpty() }
+        return when {
+            each.isEmpty() -> ""
+            strap.size == 1 -> " The strap recorded this workout too. Its own figures: ${each.single().second}."
+            else -> " The strap recorded it as ${strap.size} workouts of its own. " +
+                each.joinToString(" ") { (s, f) -> "From ${s.from ?: "its start"}: $f." }
+        }
+    }
+
+    /**
      * The (i) on the Load card: Load (EPOC), training effect on its 0 to 5 scales, time to recover, the heart rate drop
      * and VO2 max, each explained plainly with this workout's value and left out when it has none. [fromPhone] says who
-     * worked them out; [strap] is the strap's own record of a phone workout, when it kept one.
+     * worked them out, and [effectFromStrap] that a phone workout's are the strap's own; [ownRecoveryMinutes] is a phone
+     * workout's recovery before what earlier ones left ([SummaryCopy.carriedOver]); [strap] are the strap's own
+     * records of a phone workout, by start, when it kept any and its figures aren't already the ones shown.
      */
     fun effectSheet(
         aerobic: Float?, anaerobic: Float?, load: Int?, usualLoad: Float?, recoveryMinutes: Int?,
         drop60: Int?, drop120: Int?, endBpm: Int?, meaningfulDrop: Boolean, vo2max: Float?,
-        fromPhone: Boolean, strap: EffectFigures?,
+        fromPhone: Boolean, strap: List<EffectFigures>, effectFromStrap: Boolean = false,
+        ownRecoveryMinutes: Int? = null, sportType: Int? = null,
     ): EffectSheet {
         val rows = listOfNotNull(
             load?.let { l ->
@@ -164,7 +208,8 @@ object WorkoutDetailCopy {
             } else null,
             SummaryCopy.recoverSpan(recoveryMinutes)?.let {
                 "Time to recover" to "How long until your body is ready for another hard workout, from the training effect " +
-                    "and how tired you've been lately. This workout: $it."
+                    "and how tired you've been lately. It never drops below what earlier workouts left. This workout: " +
+                    (SummaryCopy.carriedOver(recoveryMinutes, ownRecoveryMinutes, sportType) ?: it) + "."
             },
             drop60?.let { d ->
                 val value = if (meaningfulDrop) {
@@ -178,14 +223,12 @@ object WorkoutDetailCopy {
             },
             vo2max?.let { "VO2 max" to "The most oxygen your body can use, in ml per kg per minute, estimated from this workout: ${Math.round(it)}." },
             "Where these come from" to (
-                if (fromPhone) "Worked out by OpenStrap from your heart rate, on the strap's own scales." else "From the strap, worked out during the workout."
-                ) + (strap?.let { s ->
-                val figures = listOfNotNull(
-                    s.aerobic?.let { "aerobic ${one(it)}" }, s.anaerobic?.let { "anaerobic ${one(it)}" }, s.load?.let { "Load $it" },
-                    SummaryCopy.recoverSpan(s.recoveryMinutes)?.let { "time to recover $it" },
-                )
-                if (figures.isEmpty()) "" else " The strap recorded this workout too. Its own figures: ${figures.joinToString(", ")}."
-            } ?: ""),
+                when {
+                    effectFromStrap -> "From the strap, which recorded this workout alongside the phone and worked these out itself."
+                    fromPhone -> "Worked out by OpenStrap from your heart rate, on the strap's own scales."
+                    else -> "From the strap, worked out during the workout."
+                }
+                ) + if (effectFromStrap) "" else strapLine(strap),
         )
         val info = Info(
             name = "Load and training effect",

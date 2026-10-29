@@ -249,7 +249,7 @@ class MainActivity : ComponentActivity() {
             val bytes = hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
             ((application as OpenStrapApp).container.strap as? org.openstrap.app.device.StrapManager)?.probe(probeEndpoint, bytes)
         }
-        // Debug: `--ez strap_sessions true` makes phone workouts also run a session on the strap (0x0019, unverified).
+        // Debug: `--ez strap_sessions false` stops phone workouts running a session on the strap (0x0019), `true` brings it back.
         if (BuildConfig.DEBUG && intent.hasExtra("strap_sessions")) {
             val on = intent.getBooleanExtra("strap_sessions", false)
             intent.removeExtra("strap_sessions")
@@ -465,6 +465,7 @@ private fun AppRoot(
     // Your usual steps by the hour, read once per day shown, off the main thread ([DayViewModel.usualSteps]).
     val usualSteps by dayVm.usualSteps.collectAsStateWithLifecycle()
     val paiHistory: org.openstrap.app.ui.glow.PaiHistory = remember(container) { { from, to -> container.health.dailyPai(from, to) } }
+    val energyHistory: org.openstrap.app.ui.glow.EnergyHistory = remember(container) { { from, to -> container.health.dailyEnergy(from, to) } }
     val strapReadiness by remember(day.dayStart) { container.database.healthDao().strapReadiness(day.dayStart) }.collectAsStateWithLifecycle(null)
     val checkIn by remember(day.date) { container.health.checkIn(day.date) }.collectAsStateWithLifecycle(null)
     val daysWithData by dayVm.daysWithData.collectAsStateWithLifecycle()
@@ -705,9 +706,12 @@ private fun AppRoot(
     val hcLauncher = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { granted ->
         val auto = hcForAuto
         hcForAuto = false
-        if (!granted.containsAll(container.healthConnect.permissions)) {
-            Toast.makeText(context, "Health Connect permissions were not granted.", Toast.LENGTH_LONG).show()
-        } else if (auto) deviceVm.setAutoHealthConnect(true) else deviceVm.exportHealthConnect()
+        scope.launch {
+            // The needed ones may have been granted before, outside what this screen returns; the calorie ones may stay off.
+            val ok = granted.containsAll(container.healthConnect.permissions) || runCatching { container.healthConnect.hasPermissions() }.getOrDefault(false)
+            if (!ok) Toast.makeText(context, "Health Connect permissions were not granted.", Toast.LENGTH_LONG).show()
+            else if (auto) deviceVm.setAutoHealthConnect(true) else deviceVm.exportHealthConnect()
+        }
     }
     // Automatic backup's folder picker (a cancel leaves it as it was), and Restore, opening on that folder or Download.
     val backupFolderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -733,11 +737,13 @@ private fun AppRoot(
         if (!container.healthConnect.isAvailable()) {
             Toast.makeText(context, "Health Connect isn't available on this phone.", Toast.LENGTH_LONG).show()
         } else scope.launch {
-            if (container.healthConnect.hasPermissions()) {
+            // The calorie permissions are optional, but asked for again until granted: the launcher goes on with the
+            // ones it needs.
+            if (container.healthConnect.hasRequestedPermissions()) {
                 if (forAuto) deviceVm.setAutoHealthConnect(true) else deviceVm.exportHealthConnect()
             } else {
                 hcForAuto = forAuto
-                hcLauncher.launch(container.healthConnect.permissions)
+                hcLauncher.launch(container.healthConnect.requestedPermissions)
             }
         }
     }
@@ -810,7 +816,8 @@ private fun AppRoot(
           if (workoutOnTop != null) {
               val recent by container.workout.recent.collectAsStateWithLifecycle()
               val zoneSeconds by container.workout.zoneSeconds.collectAsStateWithLifecycle()
-              org.openstrap.app.ui.glow.GlowWorkoutGlance(workoutOnTop, live, recent, zoneSeconds, realConnection, top)
+              val kcal by container.workout.kcal.collectAsStateWithLifecycle()
+              org.openstrap.app.ui.glow.GlowWorkoutGlance(workoutOnTop, live, recent, zoneSeconds, realConnection, top, kcal)
           } else org.openstrap.app.ui.glow.GlowTabletopHeart(
               day, live, liveEnabled.takeIf { realConnection is ConnectionState.Connected }, { container.strap.setLiveHeartRate(it) }, top,
           )
@@ -857,7 +864,9 @@ private fun AppRoot(
             containerColor = MaterialTheme.colorScheme.background,
         ) { padding ->
             if (editGoals) {
-                org.openstrap.app.ui.device.GoalsSheet(goals, onSave = { g ->
+                // The calorie goal your last four weeks suggest, read as the sheet opens (calories spec 3.4).
+                val suggestedCalories by produceState<Int?>(null) { value = runCatching { container.health.suggestedCalorieGoal() }.getOrNull() }
+                org.openstrap.app.ui.device.GoalsSheet(goals, suggestedCalories = suggestedCalories, onSave = { g ->
                     scope.launch {
                         container.settings.saveGoals(g)
                         // The Steps widget's goal, and the evening sentence's on Moment (widgets spec 7).
@@ -897,7 +906,7 @@ private fun AppRoot(
                         detail.score, day, recovery, strapReadiness?.takeIf { it.day == day.dayStart }?.score, history,
                         onOpen = push, onSwitch = { setStack(t, stack.dropLast(1) + it) }, onSelectDay = dayVm::select,
                         contentPadding = padding, onBack = pop,
-                        workouts = workouts, paiHistory = paiHistory, onEditProfile = { openPage(Page.Profile) },
+                        workouts = workouts, paiHistory = paiHistory, onEditProfile = { openPage(Page.Profile) }, energyHistory = energyHistory,
                     )
                     Detail.Week -> org.openstrap.app.ui.glow.WeekDetail(
                         org.openstrap.app.ui.glow.ActivityDetailContext(
@@ -909,6 +918,10 @@ private fun AppRoot(
                         openWorkout?.takeIf { it.workout.start == detail.start }, workouts, padding, onBack = pop,
                         onDelete = { container.workout.discard(detail.start); pop() },
                         workoutsVm = workoutsVm, session = container.workout,
+                        bmrPerMinute = org.openstrap.app.data.EnergyExpenditure.bmrPerMinute(profile, profile.age()),
+                        recovery = recovery, energyHistory = energyHistory,
+                        // Its day's Calories: the day shown moves to it, as a strip pick does.
+                        onOpenDay = { d -> dayVm.select(d); push(Detail.OfScore(org.openstrap.app.ui.dashboard.Score.Energy)) },
                     )
                     Detail.AllWorkouts -> org.openstrap.app.ui.glow.GlowWorkoutsScreen(
                         workouts, padding, onOpen = { push(Detail.Workout(it)) }, onBack = pop,
@@ -1328,6 +1341,8 @@ private fun androidx.compose.foundation.layout.BoxScope.WorkoutLayer(
     val session = container.workout
     // Read here, ahead of a workout, so the live screen usually opens on the right view at once.
     val liveView by container.settings.workoutLiveView.collectAsStateWithLifecycle(null)
+    val kcal by session.kcal.collectAsStateWithLifecycle()
+    val profile by container.settings.profile.collectAsStateWithLifecycle(null)
     val viewScope = rememberCoroutineScope()
     val padding = androidx.compose.foundation.layout.WindowInsets.navigationBars.asPaddingValues()
     val full = androidx.compose.ui.Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
@@ -1355,6 +1370,7 @@ private fun androidx.compose.foundation.layout.BoxScope.WorkoutLayer(
                             onLap = session::lap,
                             split = tabletop || bookHinge != null,
                             liveView = liveView, onLiveView = { v -> viewScope.launch { container.settings.setWorkoutLiveView(v) } },
+                            kcal = kcal,
                         )
                     }
                 }
@@ -1363,7 +1379,7 @@ private fun androidx.compose.foundation.layout.BoxScope.WorkoutLayer(
                     androidx.compose.foundation.layout.Row(androidx.compose.ui.Modifier.fillMaxSize()) {
                         org.openstrap.app.ui.glow.GlowWorkoutGlance(
                             state, live, recent, zoneSeconds, connection,
-                            androidx.compose.ui.Modifier.width(with(density) { bookHinge.bounds.left.toDp() }).fillMaxHeight(),
+                            androidx.compose.ui.Modifier.width(with(density) { bookHinge.bounds.left.toDp() }).fillMaxHeight(), kcal,
                         )
                         androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.width(with(density) { bookHinge.bounds.width().toDp() }))
                         liveScreen(androidx.compose.ui.Modifier.weight(1f).fillMaxHeight())
@@ -1373,7 +1389,7 @@ private fun androidx.compose.foundation.layout.BoxScope.WorkoutLayer(
             capsule = { place ->
                 org.openstrap.app.ui.glow.WorkoutCapsule(
                     state, live, connection is ConnectionState.Connected, onClick = { session.minimized.value = false },
-                    onPause = session::pause, onResume = session::resume, modifier = place,
+                    onPause = session::pause, onResume = session::resume, modifier = place, kcal = kcal,
                 )
             },
         )
@@ -1399,6 +1415,7 @@ private fun androidx.compose.foundation.layout.BoxScope.WorkoutLayer(
             org.openstrap.app.ui.glow.GlowWorkoutReadyScreen(
                 sport, readyPicking, connection, live, padding,
                 recentSports = recentSports, sides = sides,
+                kcalTargets = profile?.let { org.openstrap.app.data.EnergyExpenditure.bmrPerMinute(it, it.age()) } != null,
                 onSide = { s, indoor ->
                     viewScope.launch {
                         container.settings.setWorkoutSide(s, indoor)
@@ -1448,6 +1465,10 @@ private fun WorkoutDetail(
     onDelete: () -> Unit,
     workoutsVm: org.openstrap.app.ui.workout.WorkoutsViewModel,
     session: org.openstrap.app.device.WorkoutSession,
+    bmrPerMinute: Float?,
+    recovery: org.openstrap.app.data.RecoveryResult?,
+    energyHistory: org.openstrap.app.ui.glow.EnergyHistory,
+    onOpenDay: (java.time.LocalDate) -> Unit,
 ) {
     // OpenStrap's own recordings also get their summary (route, laps, sets, the recording for trim) and are deleted
     // through the session; the strap's are deleted and remembered, so the next sync doesn't bring them back.
@@ -1457,9 +1478,16 @@ private fun WorkoutDetail(
         if (start != null && fromPhone) workoutsVm.phoneSummary(start) else kotlinx.coroutines.flow.flowOf(null)
     }.collectAsStateWithLifecycle(null)
     val usualDrop by produceState<Int?>(null, start, fromPhone) { value = start?.takeIf { !fromPhone }?.let { workoutsVm.usualDrop(it) } }
+    // The workout's day: its active kcal as just worked out when it's the day shown, else as stored.
+    val date = a?.let { java.time.Instant.ofEpochSecond(it.shownStart).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }
+    val stored by remember(date, energyHistory) {
+        date?.let { d -> energyHistory(d, d) } ?: kotlinx.coroutines.flow.flowOf(emptyMap())
+    }.collectAsStateWithLifecycle(emptyMap())
+    val dayActive = recovery?.takeIf { it.date == date }?.energy?.activeKcal ?: date?.let { stored[it]?.activeKcal }
     org.openstrap.app.ui.glow.GlowWorkoutDetailScreen(
         a, summary, workouts, usualDrop, contentPadding, onBack,
         onDelete = if (fromPhone) onDelete else ({ start?.let(workoutsVm::deleteStrapWorkout); onBack() }),
         onTrim = { from, to -> start?.let { session.trim(it, from, to) } }, onUndoTrim = { start?.let(session::undoTrim) },
+        bmrPerMinute = bmrPerMinute, dayActiveKcal = dayActive, onOpenDay = date?.let { d -> { onOpenDay(d) } },
     )
 }

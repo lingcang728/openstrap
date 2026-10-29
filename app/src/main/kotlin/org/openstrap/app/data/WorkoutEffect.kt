@@ -14,6 +14,9 @@ import kotlin.math.sqrt
  * HR-only model holds up for short efforts, where heart rate lags the work by tens of seconds.
  */
 object WorkoutEffect {
+    /** Raised when [epoc] or recovery changes, so saved workouts are worked out again once (StrapManager.updateEffectModel). */
+    const val MODEL = 4
+
     /** Zepp works in 5-sample epochs of 1 Hz data, each read as its median HR (native 04 §3.1). */
     const val EPOCH_S = 5L
     /** Heart rate outside this is the sensor, not a heartbeat (native 04 §3 step 2). */
@@ -53,33 +56,29 @@ object WorkoutEffect {
     /* ------------------------------------------------ EPOC ------------------------------------------------ */
 
     /**
-     * EPOC accumulation rate at full rest-to-max reserve scale: dE/dt = [EPOC_RATE]·(e^([EPOC_STEEPNESS]·i) − 1) in
-     * ml/kg/min at intensity i. Fitted (WorkoutEffectTest) so that 30 easy minutes at 60 % HRR land near aerobic TE 2,
-     * a 60-minute tempo at 85 % near TE 5, and 6 × 3-minute intervals near TE 3.5–4, on Zepp's class-50 scale.
+     * EPOC added a minute at intensity i: [EPOC_RATE]·(e^([EPOC_STEEPNESS]·i) − 1) ml/kg. The level is fitted to the
+     * strap's own EPOC on three of its workouts over the same heart rate (37 min at 117 bpm gave 16.3, 9 min at 119
+     * gave 6), all easy; the steepness keeps harder work where it was aimed before, so 30 minutes at 60 % HRR land
+     * near aerobic TE 2.5, a 60-minute tempo at 85 % at TE 5, and 6 × 3-minute intervals near TE 3.7, on Zepp's
+     * class-50 scale (WorkoutEffectTest). A fallback for when the strap kept no record of its own ([WorkoutEffectEngine]).
      */
-    const val EPOC_RATE = 0.01
-    const val EPOC_STEEPNESS = 7.0
+    const val EPOC_RATE = 0.077
+    const val EPOC_STEEPNESS = 4.5
 
     /**
-     * Peak EPOC (ml/kg) over [epochs], the quantity Firstbeat derives training effect from (Firstbeat 2005, "Indirect
-     * EPOC prediction method based on heart rate measurement"; "EPOC based training effect assessment"). As there,
-     * EPOC is a running function of its last value, intensity and time, with intensity as %VO2max from heart-rate
-     * reserve (%HRR ≈ %VO2R, Swain & Leutholtz 1997). Ours: each epoch E += [rate − k·(1 − i)·E]·Δt, the rate rising
-     * exponentially with intensity (EPOC grows exponentially with intensity and linearly with duration, Børsheim &
-     * Bahr 2003), and clearance at Charge's EPOC decay ([Recovery.EPOC_DECAY]) at rest, none at max. Coefficients are
-     * OpenStrap's own fit, not Firstbeat's or Zepp's.
+     * EPOC (ml/kg) over [epochs], the quantity training effect is read from. As Zepp's (native 04 §4.2), it only adds:
+     * each epoch puts in a share that grows exponentially with intensity (EPOC grows exponentially with intensity and
+     * linearly with duration, Børsheim & Bahr 2003), intensity being the heart-rate reserve (%HRR ≈ %VO2R, Swain &
+     * Leutholtz 1997), and nothing is taken off during the workout. An earlier version let EPOC clear as it went and
+     * took its peak, which held a long easy walk to a third of what the strap gave. Coefficients are OpenStrap's own
+     * fit, not Zepp's network.
      */
     fun epoc(epochs: List<Epoch>, restingHr: Float, maxHr: Float): Float {
-        val k = 1.0 - Recovery.EPOC_DECAY
         val dt = EPOCH_S / 60.0
-        var e = 0.0
-        var peak = 0.0
-        for (ep in epochs) {
-            val i = Recovery.hrr(ep.bpm, restingHr, maxHr).toDouble().coerceAtMost(1.0)
-            e = (e + (EPOC_RATE * (exp(EPOC_STEEPNESS * i) - 1) - k * (1 - i) * e) * dt).coerceAtLeast(0.0)
-            if (e > peak) peak = e
-        }
-        return peak.toFloat()
+        return epochs.sumOf { ep ->
+            val i = Recovery.hrr(ep.bpm, restingHr, maxHr).toDouble().coerceIn(0.0, 1.0)
+            EPOC_RATE * (exp(EPOC_STEEPNESS * i) - 1) * dt
+        }.toFloat()
     }
 
     /* ------------------------------------------- Training effect ------------------------------------------- */
@@ -127,10 +126,11 @@ object WorkoutEffect {
     /* ------------------------------------------- Recovery time ------------------------------------------- */
 
     /**
-     * Hours to recover by aerobic TE, joined by straight lines. A design choice, not a fitted model: Zepp's own rule is
-     * switched off for app workouts (native 04 §6.2), so this keeps only its shape: rising with load and 72 h at TE 5.
+     * Hours to recover by aerobic TE, joined by straight lines. Zepp's own rule is switched off for app workouts
+     * (native 04 §6.2), so this keeps its shape, rising with load to 72 h at TE 5, anchored low on the strap's own:
+     * 11 h for a walk at aerobic TE 2.1. A design choice beyond that one point.
      */
-    private val RECOVERY_HOURS = listOf(0f to 0f, 1f to 6f, 2f to 16f, 3f to 28f, 4f to 48f, 5f to 72f)
+    private val RECOVERY_HOURS = listOf(0f to 0f, 1f to 5f, 2f to 10f, 3f to 20f, 4f to 40f, 5f to 72f)
     /** Never longer than Zepp's TE-5 value (native 04 §6.2); its 96 h needs an anaerobic TE we don't make. */
     const val MAX_RECOVERY_H = 72f
     /** At most this much longer when fatigue (ATL) runs ahead of fitness (CTL). */
@@ -282,7 +282,8 @@ object WorkoutEffect {
     /* ---------------------------------------------- Together ---------------------------------------------- */
 
     /** A workout's figures. [epoc] is null without heart rate; [vo2max] null outside a valid run. */
-    data class Result(val epoc: Float?, val aerobicTe: Float?, val recoveryMinutes: Int?, val vo2max: Float?)
+    /** [recoveryMinutes] counts what earlier workouts left; [ownRecoveryMinutes] is this workout's alone. */
+    data class Result(val epoc: Float?, val aerobicTe: Float?, val recoveryMinutes: Int?, val vo2max: Float?, val ownRecoveryMinutes: Int? = null)
 
     /**
      * Everything for one workout from [from] to [end]. [load28] is the 28 days' workout EPOC before it, [trend] the
@@ -296,6 +297,9 @@ object WorkoutEffect {
         if (eps.isEmpty()) return Result(null, null, null, null)
         val e = epoc(eps, restingHr, maxHr)
         val te = aerobicTe(e, eps.size, activityClass(load28))
-        return Result(e, te, recoveryMinutes(te, trend, carriedMinutes), vo2max(sportType, eps, route, pauses, restingHr, maxHr))
+        return Result(
+            e, te, recoveryMinutes(te, trend, carriedMinutes), vo2max(sportType, eps, route, pauses, restingHr, maxHr),
+            ownRecoveryMinutes = recoveryMinutes(te, trend),
+        )
     }
 }

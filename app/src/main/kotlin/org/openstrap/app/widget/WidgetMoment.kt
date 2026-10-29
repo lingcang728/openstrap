@@ -26,8 +26,9 @@ suspend fun widgetMomentInputs(
     val today = now.atZone(zone).toLocalDate()
     val t = now.epochSecond
     val from = t - MomentResolver.USUAL_WORKOUT_DAYS * 86_400L
-    val strap = dao.workoutsOnce(from, t)
     val phone = dao.appWorkoutsOnce(from, t)
+    // The strap's record of a phone workout is that workout, as in the lists ([Workouts.sameWorkout]).
+    val strap = dao.workoutsOnce(from, t).filter { Workouts.phoneTwin(it, phone, t) == null }
     // You started it: not one the strap noticed or filed as "Activity" by itself (WorkoutAnalysis.startedByYou).
     val starts = strap.filter { it.subtype != Workouts.SUBTYPE_AUTO_DETECTED && it.sportType != Workouts.GENERIC_ACTIVITY }.map { it.start } +
         phone.filter { it.sportType != Workouts.GENERIC_ACTIVITY }.map { it.start }

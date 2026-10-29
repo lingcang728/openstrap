@@ -95,7 +95,8 @@ reads as the same light:
 | Metric | Ink | Metric | Ink |
 |---|---|---|---|
 | Recovery | `readiness` #7CF2C9 | Heart rate, resting, lowest, average | `heart` #FF5A5F |
-| Energy | `charge` Ember #F66C28 | Steps, Activity, Active minutes, Calories, Distance | `steps` #C3F53C |
+| Energy | `charge` Ember #F66C28 | Steps, Activity, Active minutes, Distance | `steps` #C3F53C |
+| Calories | `calories` Gold #FFD23F, `caloriesShade` #8C7314 for walking in its bars | | |
 | Sleep, last night, naps, regularity | `sleepDeep` #4C6FFF, stages `sleepLight` `sleepRem` `sleepAwake` | HRV | `hrv` #2DD4BF |
 | Blood oxygen | `spo2` #38BDF8 | Stress | `stress` #F062C0 |
 | Skin temperature | `temperature` #FF8A3D | Breathing rate, Breathing disturbances | `sleepLight` #8FA8FF |

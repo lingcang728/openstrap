@@ -105,6 +105,8 @@ object SettingsCodec {
     const val KEY_STRESS = 0x13
     const val KEY_SMART_SPO2 = 0x31
     const val KEY_LOW_SPO2_ALERT = 0x32
+    /** HEALTH key 83 `calorieTarget`, an i16 of active kcal; the strap reports 300 in 200 to 3000 (03 §3.6.2). */
+    const val KEY_CALORIE_TARGET = 0x53
 
     /** General group; key 47 is fast-recharge mode, which blocks firmware updates and history sync (c6j.java:135). */
     const val GROUP_GENERAL = 0x0A
@@ -201,6 +203,28 @@ object SettingsCodec {
     }
 
     fun enumSetting(key: Int, value: Int) = Setting(key, TYPE_ENUM, byteArrayOf(value.toByte()), value.toLong())
+    /**
+     * An integer setting in [type] as the strap reported the key: an i16 or an i32, little-endian. Null for any other
+     * type, so a key whose type is unexpected is never written with the wrong width.
+     */
+    fun intSetting(key: Int, type: Int, value: Int): Setting? = when (type) {
+        TYPE_I16 -> Setting(key, type, byteArrayOf(value.toByte(), (value shr 8).toByte()), value.toLong())
+        TYPE_I32 -> Setting(key, type, ByteArray(4) { (value shr (8 * it)).toByte() }, value.toLong())
+        else -> null
+    }
+
+    /**
+     * The write that sets the strap's calorie target to [kcal] given its HEALTH group as read ([health]), in the type
+     * it reported for key 83. Null when the strap doesn't report the key, already holds [kcal], or reports a type
+     * other than an integer.
+     */
+    fun calorieTargetFor(health: SettingsGroup, kcal: Int): ByteArray? {
+        val current = health[KEY_CALORIE_TARGET] ?: return null
+        if (current.number == kcal.toLong()) return null
+        val setting = intSetting(KEY_CALORIE_TARGET, current.type, kcal) ?: return null
+        return write(GROUP_HEALTH, health.version, listOf(setting))
+    }
+
     fun boolSetting(key: Int, on: Boolean) = Setting(key, TYPE_BOOL, byteArrayOf(if (on) 1 else 0), if (on) 1 else 0)
 
     /** Restarts the strap: GENERAL key 45 = true; [version] is the GENERAL group version as read. Answered `06 01`, then the link drops. */

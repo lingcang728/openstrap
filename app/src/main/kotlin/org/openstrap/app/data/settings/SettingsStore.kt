@@ -202,10 +202,11 @@ class SettingsStore(private val context: Context) {
     private val strapSessionsKey = androidx.datastore.preferences.core.booleanPreferencesKey("strap_sessions")
 
     /**
-     * Experimental, off by default: a phone workout also starts a session on the strap (0x0019), so the strap keeps
-     * its own record. Not yet verified on hardware; a debug intent turns it on.
+     * On by default: a phone workout also runs a session on the strap (0x0019), so the strap keeps its own record of
+     * it, whose heart rate and effect the workout then takes (verified on the strap 2026-10-30, codemap 05 §5.11). A
+     * debug intent turns it off, to compare the live stream without one.
      */
-    val strapSessions: Flow<Boolean> = context.dataStore.data.map { it[strapSessionsKey] ?: false }
+    val strapSessions: Flow<Boolean> = context.dataStore.data.map { it[strapSessionsKey] ?: true }
 
     suspend fun setStrapSessions(enabled: Boolean) {
         context.dataStore.edit { it[strapSessionsKey] = enabled }
@@ -285,12 +286,14 @@ class SettingsStore(private val context: Context) {
     private val stepGoal = androidx.datastore.preferences.core.intPreferencesKey("goal_steps")
     private val sleepGoal = androidx.datastore.preferences.core.intPreferencesKey("goal_sleep_minutes")
     private val activeGoal = androidx.datastore.preferences.core.intPreferencesKey("goal_active_hours")
+    private val calorieGoal = androidx.datastore.preferences.core.intPreferencesKey("goal_calories")
 
     val goals: Flow<Goals> = context.dataStore.data.map { prefs ->
         Goals(
             prefs[stepGoal] ?: Goals.DEFAULT_STEPS,
             prefs[sleepGoal] ?: Goals.DEFAULT_SLEEP_MINUTES,
             prefs[activeGoal] ?: Goals.DEFAULT_ACTIVE_HOURS,
+            prefs[calorieGoal] ?: Goals.DEFAULT_CALORIES,
         )
     }
 
@@ -299,6 +302,7 @@ class SettingsStore(private val context: Context) {
             it[stepGoal] = g.steps
             it[sleepGoal] = g.sleepMinutes
             it[activeGoal] = g.activeHours
+            it[calorieGoal] = g.calories
         }
     }
 
@@ -368,7 +372,7 @@ class SettingsStore(private val context: Context) {
     /** Forgets the strap and the Zepp sign-in; the user's profile and goals stay. */
     suspend fun forgetDevice() {
         context.dataStore.edit { prefs ->
-            val keep = setOf(birthYear, sex, weight, height, imperial, sleepNeed, maxHr, activityLevel, activityAt, bodyAt, betaBlocker, pregnant, stepGoal, sleepGoal, activeGoal, todayHidden, todayPinned, hcAuto, hcSynced, hcStopped, buzzCalls, buzzNotifications, buzzPattern, callBuzz, backupFolder, backupFolderName, backupDone, backupFailed, backupFailedAt)
+            val keep = setOf(birthYear, sex, weight, height, imperial, sleepNeed, maxHr, activityLevel, activityAt, bodyAt, betaBlocker, pregnant, stepGoal, sleepGoal, activeGoal, calorieGoal, todayHidden, todayPinned, hcAuto, hcSynced, hcStopped, buzzCalls, buzzNotifications, buzzPattern, callBuzz, backupFolder, backupFolderName, backupDone, backupFailed, backupFailedAt)
             prefs.asMap().keys.filter { it !in keep }.forEach { prefs.remove(it) }
         }
     }

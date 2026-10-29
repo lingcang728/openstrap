@@ -146,4 +146,22 @@ class SummaryCopyTest {
         assertEquals("Last 176 m", SummaryCopy.splitRows(splits, emptyList(), 0L, totalMeters = 2176f).last().name)
         assertEquals("Last 185 m", SummaryCopy.splitRows(splits, emptyList(), 0L).last().name)
     }
+
+    @Test fun `the workout card says its calories, active first`() {
+        assertEquals("486 active kcal, total 1,612", SummaryCopy.kcalLine(486, 1612, Locale.UK))
+        assertEquals("612 kcal", SummaryCopy.kcalLine(null, 612, Locale.UK))
+        assertNull(SummaryCopy.kcalLine(null, null))
+        assertNull(SummaryCopy.kcalLine(0, 0))
+    }
+
+    @Test fun `the workout card says whether its kcal target was reached`() {
+        assertEquals("Target 400 kcal, reached at 38:10", SummaryCopy.targetLine("k:400", 2290, 431, Locale.UK))
+        assertEquals("Target not reached, 212 of 300 kcal", SummaryCopy.targetLine("k:300", null, 212, Locale.UK))
+        assertEquals("Target 300 kcal, reached", SummaryCopy.targetLine("k:300", null, 305, Locale.UK))
+        assertEquals("Target 300 kcal, not reached", SummaryCopy.targetLine("k:300", null, null, Locale.UK))
+        assertNull(SummaryCopy.targetLine("z:1-2", null, 300))
+        assertNull(SummaryCopy.targetLine(null, null, 300))
+        listOfNotNull(SummaryCopy.targetLine("k:400", 2290, 431), SummaryCopy.targetLine("k:300", null, 212))
+            .forEach { l -> listOf("·", ";", "—").forEach { b -> assertFalse("$l has $b", l.contains(b)) } }
+    }
 }

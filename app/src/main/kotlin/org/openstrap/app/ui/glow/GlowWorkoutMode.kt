@@ -133,6 +133,9 @@ import org.openstrap.app.ui.theme.AppIcons
 import org.openstrap.app.ui.workout.SportIcons
 import org.openstrap.app.ui.workout.ZONE_COLORS
 import org.openstrap.app.ui.workout.LiveView
+import org.openstrap.app.ui.workout.SideFigure
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import org.openstrap.app.ui.workout.WorkoutCopy
 import org.openstrap.app.ui.workout.SummaryCopy
 import java.time.Instant
@@ -187,16 +190,18 @@ internal fun activeSeconds(r: WorkoutState.Recording): Long = produceState(Worko
     }
 }.value
 
-/** A target's colour: the top zone it aims for, a calm blue for a time, white for none. */
+/** A target's colour: the top zone it aims for, a calm blue for a time, Calories' gold for kcal, white for none. */
 internal fun targetColor(t: WorkoutTarget?): Color = when (t) {
     is WorkoutTarget.Zones -> ZONE_COLORS[t.high]
     is WorkoutTarget.Time -> ZONE_COLORS[0]
+    is WorkoutTarget.Kcal -> MetricColors.calories
     null -> Color.White
 }
 
 internal fun targetLabel(t: WorkoutTarget?): String = when (t) {
     is WorkoutTarget.Zones -> t.label
     is WorkoutTarget.Time -> t.label
+    is WorkoutTarget.Kcal -> t.label
     null -> "None"
 }
 
@@ -527,6 +532,8 @@ fun GlowWorkoutReadyScreen(
     sides: Map<Int, Boolean> = emptyMap(),
     onSide: (sport: Int, indoor: Boolean) -> Unit = { _, _ -> },
     onTurnOnLocation: (then: () -> Unit) -> Unit = { it() },
+    /** kcal targets are offered: there's a profile to work kcal out from. */
+    kcalTargets: Boolean = false,
 ) {
     var picking by rememberSaveable { mutableStateOf(pickSport) }
     var askToEnd by rememberSaveable { mutableStateOf(true) }
@@ -551,7 +558,8 @@ fun GlowWorkoutReadyScreen(
     var setsTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     var restSeconds by rememberSaveable { mutableStateOf(Strength.Rest.DEFAULT.seconds) }
     var restBelow by rememberSaveable { mutableStateOf<Int?>(null) }
-    val target = WorkoutTarget.parse(targetCode)
+    // A kcal target picked before the profile went is dropped with its chip.
+    val target = WorkoutTarget.parse(targetCode)?.takeIf { it in WorkoutTarget.offered(kcalTargets) }
     var info by rememberSaveable { mutableStateOf(false) }
     val haptics = rememberHaptics()
     if (picking) {
@@ -619,10 +627,10 @@ fun GlowWorkoutReadyScreen(
             Chips(Strength.Rest.LEVELS.map { it?.let { b -> "$b bpm" } ?: "Off" }, Strength.Rest.LEVELS.indexOf(restBelow), Color.White) { restBelow = Strength.Rest.LEVELS[it] }
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ChipLabel("Target. The strap buzzes if you drift out.")
+            ChipLabel(WorkoutCopy.targetHint(target))
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                (listOf<WorkoutTarget?>(null) + WorkoutTarget.presets).forEach { t ->
-                    Chip(targetLabel(t), t?.code == targetCode, targetColor(t)) { targetCode = t?.code }
+                (listOf<WorkoutTarget?>(null) + WorkoutTarget.offered(kcalTargets)).forEach { t ->
+                    Chip(targetLabel(t), t == target, targetColor(t)) { targetCode = t?.code }
                 }
             }
         }
@@ -884,6 +892,7 @@ fun GlowWorkoutLiveScreen(
     split: Boolean = false,
     liveView: Int? = null,
     onLiveView: (Int) -> Unit = {},
+    kcal: WorkoutRecorder.Kcal? = null,
 ) {
     BackHandler(onBack = onMinimize)
     // Saved with the screen; [liveView] is the view from the last workout, loaded a moment after the screen opens.
@@ -934,7 +943,7 @@ fun GlowWorkoutLiveScreen(
         val heartCard: @Composable () -> Unit = {
             WorkoutHeartCard(
                 r, liveHeartRate, recent, zoneSeconds, connected, active,
-                Modifier.fillMaxWidth().onSizeChanged { cardHeight = with(density) { it.height.toDp() } },
+                Modifier.fillMaxWidth().onSizeChanged { cardHeight = with(density) { it.height.toDp() } }, kcal = kcal?.active,
             )
         }
         // GPS workouts have two views, heart rate and the map, with two dots under them (pattern D5). They swipe as
@@ -952,29 +961,29 @@ fun GlowWorkoutLiveScreen(
             PageDots(pager.currentPage, LiveView.entries.size) { scope.launch { pager.animateScrollToPage(it) } }
         } else heartCard()
         if (r.strength) SetsPanel(r, color, onStartSet, { haptics.perform(HapticEvent.SetDone); onSetDone() }, onExtendRest)
-        // Centred between the card and the buttons: the moving time large in the middle, two smaller figures either
+        // Centred between the card and the buttons: the moving time large in the middle, the average and peak either
         // side (Oura's avg and max around the live number), labels under the numbers and thin rules between (WHOOP).
+        // kcal, the distance and the pace sit in a row under it, so every figure shows without a tap.
         Spacer(Modifier.weight(1f))
+        val figures = WorkoutCopy.liveFigures(WorkoutCopy.sideFigures(kcal != null, r.workout.distanceMeters != null, !r.workout.distanceFromSteps))
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), verticalAlignment = Alignment.Bottom) {
-            val distance = r.workout.distanceMeters
-            // With a distance it and the pace (GPS) take the sides; from steps, the distance and the average.
-            // "1.25" alone could be anything: the label carries the unit from a kilometre on.
-            val unit = if (distance != null && distance >= 1000) " km" else ""
-            when {
-                distance == null -> LiveStat("Avg", Modifier.weight(1f)) { LiveValue(stats?.average?.toString()) }
-                else -> LiveStat((if (r.workout.distanceFromSteps) "Distance ≈" else "Distance") + unit, Modifier.weight(1f)) { LiveValue(km(distance)) }
-            }
+            SideStat(figures.sides[0], r, stats, kcal, route, Modifier.weight(1f))
             StatRule()
             LiveStat("Moving time", Modifier.weight(1.5f)) {
                 // Plain digits: the heart rate above is the one dot-matrix number on the screen.
                 Text(workoutClock(active), color = Color.White, style = LiveClock)
             }
             StatRule()
-            when {
-                distance != null && !r.workout.distanceFromSteps -> LiveStat("Pace /km", Modifier.weight(1f)) { LiveValue(Route.formatPace(Route.currentPace(route))) }
-                distance != null -> LiveStat("Avg", Modifier.weight(1f)) { LiveValue(stats?.average?.toString()) }
-                else -> LiveStat("Max", Modifier.weight(1f)) { LiveValue(stats?.max?.toString()) }
+            SideStat(figures.sides[1], r, stats, kcal, route, Modifier.weight(1f))
+        }
+        if (figures.below.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(top = 16.dp).height(IntrinsicSize.Min), verticalAlignment = Alignment.Bottom) {
+            // A figure alone sits in the middle third, under the moving time, rather than across the screen.
+            if (figures.below.size == 1) Spacer(Modifier.weight(1f))
+            figures.below.forEachIndexed { i, f ->
+                if (i > 0) StatRule()
+                SideStat(f, r, stats, kcal, route, Modifier.weight(1f))
             }
+            if (figures.below.size == 1) Spacer(Modifier.weight(1f))
         }
         // The splits live in the summary; here each kilometre gets a line for a few seconds.
         if (r.workout.useGps) KmSplitLine(route, WorkoutCopy.readings(history, recent), r.workout.pauseRanges)
@@ -1111,6 +1120,8 @@ private fun WorkoutHeartCard(
     active: Long,
     modifier: Modifier,
     fill: Boolean = false,
+    /** The live active kcal, for a kcal target's progress. */
+    kcal: Float? = null,
 ) {
     val bpm = liveHeartRate.takeIf { connected && !r.paused }
     val zone = WorkoutRecorder.liveZone(bpm, r.maxHeartRate)
@@ -1162,6 +1173,7 @@ private fun WorkoutHeartCard(
                 when (val t = WorkoutTarget.parse(r.workout.target)) {
                     is WorkoutTarget.Zones -> Note("Target ${t.label.removePrefix("Zone ")}, the strap buzzes if you drift")
                     is WorkoutTarget.Time -> Note("${workoutClock(active)} of ${t.label}")
+                    is WorkoutTarget.Kcal -> Note(WorkoutCopy.kcalProgress(kcal, t))
                     null -> Unit
                 }
             }
@@ -1181,10 +1193,11 @@ fun GlowWorkoutGlance(
     zoneSeconds: IntArray,
     connection: ConnectionState,
     modifier: Modifier = Modifier,
+    kcal: WorkoutRecorder.Kcal? = null,
 ) {
     val connected = connection is ConnectionState.Connected
     Box(modifier.background(Color.Black).statusBarsPadding().padding(horizontal = GlowLayout.Gutter, vertical = 12.dp)) {
-        WorkoutHeartCard(r, liveHeartRate, recent, zoneSeconds, connected, activeSeconds(r), Modifier.fillMaxSize(), fill = true)
+        WorkoutHeartCard(r, liveHeartRate, recent, zoneSeconds, connected, activeSeconds(r), Modifier.fillMaxSize(), fill = true, kcal = kcal?.active)
     }
 }
 
@@ -1287,6 +1300,38 @@ private fun LiveStat(label: String, modifier: Modifier, value: @Composable () ->
     }
 }
 
+/**
+ * One figure around the moving time. "1.25" alone could be anything: the distance's label carries the unit from a
+ * kilometre on. kcal is active kcal, in plain digits like the rest.
+ */
+@Composable
+private fun SideStat(
+    figure: SideFigure, r: WorkoutState.Recording, stats: WorkoutRecorder.Stats?, kcal: WorkoutRecorder.Kcal?,
+    route: List<Route.Point>, modifier: Modifier,
+) {
+    val distance = r.workout.distanceMeters
+    val (label, value) = when (figure) {
+        SideFigure.Avg -> "Avg" to stats?.average?.toString()
+        SideFigure.Max -> "Max" to stats?.max?.toString()
+        SideFigure.Kcal -> "kcal" to kcal?.active?.toInt()?.toString()
+        SideFigure.Distance -> (if (r.workout.distanceFromSteps) "Distance ≈" else "Distance") +
+            (if (distance != null && distance >= 1000) " km" else "") to distance?.let(::km)
+        SideFigure.Pace -> "Pace /km" to Route.formatPace(Route.currentPace(route))
+    }
+    val spoken = when (figure) {
+        SideFigure.Avg -> "Average heart rate"
+        SideFigure.Max -> "Peak heart rate"
+        SideFigure.Kcal -> "Active kcal"
+        SideFigure.Distance -> if (r.workout.distanceFromSteps) "Distance from steps" else "Distance"
+        SideFigure.Pace -> "Pace per kilometre"
+    }
+    val unit = if (figure == SideFigure.Distance && distance != null && distance >= 1000) " kilometres" else ""
+    LiveStat(
+        label,
+        modifier.semantics(mergeDescendants = true) { contentDescription = "$spoken ${value?.let { it + unit } ?: "waiting"}" },
+    ) { LiveValue(value) }
+}
+
 /** The thin rule between the live figures. */
 @Composable
 private fun StatRule() = Box(Modifier.padding(vertical = 6.dp).width(1.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.12f)))
@@ -1377,13 +1422,14 @@ private fun HoldToEnd(onEnd: () -> Unit) {
 }
 
 private val EndRed = MetricColors.heart
-private const val HOLD_MS = 1000
+private const val HOLD_MS = 2000
 
 /* ------------------------------------- Rest of the app meanwhile ------------------------------------- */
 
 /**
  * The workout tucked away: a bar above the tab bar ringed in the zone's colour, with a dot pulsing at the heart
- * rate, the sport and time, the zone, the bpm and Pause. Tap it to bring the live screen back.
+ * rate, the sport and time (and the active kcal after it when there's room), the zone, the bpm and Pause. Tap it to
+ * bring the live screen back.
  */
 @Composable
 fun WorkoutCapsule(
@@ -1394,6 +1440,7 @@ fun WorkoutCapsule(
     onPause: () -> Unit,
     onResume: () -> Unit,
     modifier: Modifier = Modifier,
+    kcal: WorkoutRecorder.Kcal? = null,
 ) {
     val bpm = liveHeartRate.takeIf { connected && !r.paused }
     val zone = WorkoutRecorder.liveZone(bpm, r.maxHeartRate)
@@ -1409,7 +1456,12 @@ fun WorkoutCapsule(
         PulseDot(color, bpm, 12.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text("${Workouts.sportName(r.workout.sportType)}, ${workoutClock(active)}", color = Color.White, style = MediumBody, maxLines = 1)
+            AfterIfRoom(
+                { Text("${Workouts.sportName(r.workout.sportType)}, ${workoutClock(active)}", color = Color.White, style = MediumBody, maxLines = 1) },
+                WorkoutCopy.kcalText(kcal?.active)?.let { k ->
+                    { Text(k, color = Color.White.copy(alpha = 0.6f), style = MediumBody.copy(fontFeatureSettings = "tnum"), maxLines = 1, modifier = Modifier.padding(start = 8.dp)) }
+                },
+            )
             Text(
                 when {
                     r.endPrompt != null -> "Stopped? Tap to answer"
@@ -1430,6 +1482,25 @@ fun WorkoutCapsule(
             contentAlignment = Alignment.Center,
         ) {
             Icon(if (r.paused) AppIcons.PlayFill else AppIcons.PauseFill, if (r.paused) "Resume" else "Pause", tint = Color.Black, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+/**
+ * [first], then [after] beside it on the same line only if all of it fits in the width left; otherwise
+ * [after] is left out rather than cut short.
+ */
+@Composable
+private fun AfterIfRoom(first: @Composable () -> Unit, after: (@Composable () -> Unit)?) {
+    androidx.compose.ui.layout.Layout(content = { first(); after?.invoke() }) { measurables, constraints ->
+        val loose = constraints.copy(minWidth = 0)
+        val a = measurables[0].measure(loose)
+        val b = measurables.getOrNull(1)?.measure(loose.copy(maxWidth = androidx.compose.ui.unit.Constraints.Infinity))
+            ?.takeIf { a.width + it.width <= constraints.maxWidth }
+        val height = maxOf(a.height, b?.height ?: 0)
+        layout((a.width + (b?.width ?: 0)).coerceIn(constraints.minWidth, constraints.maxWidth), height) {
+            a.placeRelative(0, 0)
+            b?.placeRelative(a.width, 0)
         }
     }
 }

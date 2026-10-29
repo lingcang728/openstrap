@@ -12,6 +12,8 @@ import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.openstrap.app.data.db.AppWorkout
+import org.openstrap.app.data.db.DailyEnergyRow
 import org.openstrap.app.data.db.DeletedWorkout
 import org.openstrap.app.data.db.HealthDao
 import org.openstrap.app.data.db.HeartRateSample
@@ -225,5 +227,19 @@ class CsvRestoreTest {
         }.toByteArray()
         try { restore(zip); fail("restored a zip that isn't an export") } catch (_: IllegalArgumentException) {}
         assertEquals(listOf(HeartRateSample(day, 70)), phone.healthDao().hr())
+    }
+
+    @Test fun `daily energy and a phone workout's kcal target come back, before the phone's own days`() = runTest {
+        fun energy(d: Long, total: Float) = DailyEnergyRow(d, d + 86_399, total, 450f, 1650f, 1440, false, 120f, 200f, List(24) { "%.1f".format(java.util.Locale.ROOT, it * 1.5f) }.joinToString(","))
+        old.healthDao().insertDailyEnergy(listOf(energy(day - 2 * 86_400, 2100f), energy(day - 86_400, 2200f), energy(day, 2300f)))
+        val w = AppWorkout(day - 86_400 + 17 * 3600, day - 86_400 + 18 * 3600, 1, target = "k:300", activeKcal = 320f, totalKcal = 410f, targetReachedAt = day - 86_400 + 17 * 3600 + 2900)
+        old.healthDao().insertAppWorkouts(listOf(w))
+        // The phone already worked out today: it keeps its own row.
+        phone.healthDao().insertDailyEnergy(listOf(energy(day, 999f)))
+        restore(backup(old))
+        assertEquals(listOf(2100f, 2200f, 999f), phone.healthDao().dailyEnergyOnce(0, Long.MAX_VALUE / 2).map { it.totalKcal })
+        assertEquals(old.healthDao().dailyEnergyOnce(0, day - 1), phone.healthDao().dailyEnergyOnce(0, day - 1))
+        assertEquals(24, phone.healthDao().dailyEnergyOnce(day - 86_400, day - 86_400).single().hourlyKcal.size)
+        assertEquals(listOf(w), phone.healthDao().appWorkoutsAll())
     }
 }

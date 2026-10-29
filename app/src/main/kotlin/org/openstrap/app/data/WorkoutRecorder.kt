@@ -4,6 +4,7 @@ import org.openstrap.app.data.db.AppWorkout
 import org.openstrap.app.data.db.AppWorkoutHeartRate
 import org.openstrap.app.data.db.Workout
 import org.openstrap.app.data.db.WorkoutHeartRate
+import org.openstrap.app.data.settings.UserProfile
 
 /**
  * A workout recorded on the phone, worked out in pure Kotlin like [Recovery]: which minutes the phone missed, how the
@@ -99,13 +100,14 @@ object WorkoutRecorder {
         end = w.end ?: now,
         sportType = w.sportType,
         exerciseSeconds = activeSeconds(w, now).toInt(),
-        calories = null,
-        averageHeartRate = stats?.average ?: w.averageHeartRate,
-        maxHeartRate = stats?.max ?: w.maxHeartRate,
+        calories = w.totalKcal?.let { Math.round(it) },
+        // The strap's own record of the workout ([withStrapRecord]) stands over the phone's live readings.
+        averageHeartRate = (if (w.effectFromStrap) w.averageHeartRate else null) ?: stats?.average ?: w.averageHeartRate,
+        maxHeartRate = (if (w.effectFromStrap) w.maxHeartRate else null) ?: stats?.max ?: w.maxHeartRate,
         minHeartRate = stats?.min,
         aerobicTrainingEffect = w.aerobicTrainingEffect,
-        // No open model holds up for it from heart rate alone ([WorkoutEffect]).
-        anaerobicTrainingEffect = null,
+        // Only the strap's: no open model holds up for it from heart rate alone ([WorkoutEffect]).
+        anaerobicTrainingEffect = w.anaerobicTrainingEffect,
         // The strap's load is Zepp's int EPOC (native 04 §2.1); ours is on the same scale, so the two compare.
         trainingLoad = w.epoc?.toInt(),
         vo2max = w.vo2max?.let { Math.round(it) },
@@ -122,10 +124,18 @@ object WorkoutRecorder {
         return Workouts.analyse(toWorkout(w, now, stats(shown)), expand(shown).filter { it.timestamp in w.from..end }, emptyList(), maxHeartRate)
             .copy(
                 fromPhone = true, historyMinutes = shown.count { it.fromHistory }, historyRanges = historyRanges(shown),
-                shownStart = w.from, recordedEnd = w.recordedEnd, recoveryMinutes = w.recoveryMinutes,
-                distanceMeters = w.distanceMeters, distanceFromSteps = w.distanceFromSteps,
+                shownStart = w.from, recordedEnd = w.recordedEnd, recoveryMinutes = w.recoveryMinutes, ownRecoveryMinutes = w.ownRecoveryMinutes,
+                distanceMeters = w.distanceMeters, distanceFromSteps = w.distanceFromSteps, activeKcal = w.activeKcal,
+                target = w.target, targetReachedSeconds = reachedSeconds(w, end),
             )
     }
+
+    /**
+     * Active seconds into [w] when its kcal target was reached: from its shown start, less the pauses before. Null when
+     * it wasn't, or when a trim left that moment outside the shown range up to [end].
+     */
+    fun reachedSeconds(w: AppWorkout, end: Long = w.end ?: Long.MAX_VALUE): Long? =
+        w.targetReachedAt?.takeIf { it in w.from..end }?.let { (it - w.from - w.pausedSeconds(it)).coerceAtLeast(0) }
 
     /** The samples inside the shown range; a history row stands for its whole minute, so it counts when the minute overlaps. */
     fun shown(w: AppWorkout, hr: List<AppWorkoutHeartRate>, end: Long = w.end ?: Long.MAX_VALUE): List<AppWorkoutHeartRate> =
@@ -134,6 +144,134 @@ object WorkoutRecorder {
     /** [w] with its stored average and peak worked out again over its shown range, for the lists. */
     fun withStats(w: AppWorkout, hr: List<AppWorkoutHeartRate>): AppWorkout =
         stats(shown(w, hr)).let { w.copy(averageHeartRate = it?.average, maxHeartRate = it?.max) }
+
+    /**
+     * [w] with the figures of [s], the strap's own record of nearly all of it ([Workouts.strapCovers]), and [effect], its
+     * sport effect: its EPOC as Load, both training effects, its recovery time, and its average and peak heart rate,
+     * over every second it measured, where the live stream can miss stretches (on the strap, 255 seconds against 205
+     * live, the shared ones within 2 bpm). Its VO2max stays the phone's. Null without an EPOC, so the model's figures stand.
+     */
+    fun withStrapRecord(w: AppWorkout, s: Workout, effect: org.openstrap.app.data.db.SportEffectRow?): AppWorkout? {
+        val epoc = effect?.epoc ?: s.trainingLoad?.toFloat() ?: return null
+        return w.copy(
+            epoc = epoc, aerobicTrainingEffect = s.aerobicTrainingEffect, anaerobicTrainingEffect = s.anaerobicTrainingEffect,
+            recoveryMinutes = effect?.recoveryMinutes ?: w.recoveryMinutes, effectFromStrap = true, ownRecoveryMinutes = null,
+            averageHeartRate = s.averageHeartRate ?: w.averageHeartRate, maxHeartRate = s.maxHeartRate ?: w.maxHeartRate,
+        )
+    }
+
+    /* ------------------------------------ The strap's own session (0x0019) ----------------------------------- */
+
+    /** What a recording workout does when the strap changes its session itself. */
+    enum class StrapAction { PAUSE, RESUME, END }
+
+    /**
+     * The answer to the strap changing its session's state itself, as Zepp's `uv60.i()` follows it: a pause or resume
+     * only when it changes something, a stop ends the workout. Zepp leaves a start or an abandon alone, and so does this.
+     */
+    fun strapAction(state: org.openstrap.protocol.services.SportSession.State, paused: Boolean): StrapAction? = when (state) {
+        org.openstrap.protocol.services.SportSession.State.PAUSE -> StrapAction.PAUSE.takeIf { !paused }
+        org.openstrap.protocol.services.SportSession.State.RESUME -> StrapAction.RESUME.takeIf { paused }
+        org.openstrap.protocol.services.SportSession.State.STOP -> StrapAction.END
+        else -> null
+    }
+
+    /** The state that closes the strap's session: STOP for a workout that is kept, ABANDON for one that isn't, so the strap drops its record. */
+    fun closingState(kept: Boolean) =
+        if (kept) org.openstrap.protocol.services.SportSession.State.STOP else org.openstrap.protocol.services.SportSession.State.ABANDON
+
+    /* ---------------------------------------------- Energy --------------------------------------------- */
+
+    /** A workout's kcal: above rest (what the workout shows) and in all. */
+    data class Kcal(val active: Float, val total: Float)
+
+    /**
+     * kcal for each active minute of [w] ([EnergyExpenditure.workoutMinutes]): the minute starts inside its shown range
+     * less its pauses (the one under way included), up to [now] while it records, with the heart rate of [hr] in them,
+     * live and history alike. [steps] is steps per minute start. Null without weight, height and age.
+     */
+    fun kcalMinutes(
+        w: AppWorkout, hr: List<AppWorkoutHeartRate>, steps: Map<Long, Int>, restingHr: Float, maxHr: Float,
+        profile: UserProfile, age: Int?, vo2max: Float?, now: Long = System.currentTimeMillis() / 1000,
+    ): List<EnergyExpenditure.WorkoutMinute>? {
+        val end = w.end ?: now
+        val ranges = Recovery.activeRanges(w, end).filter { !it.isEmpty() }
+        val minutes = ranges.flatMap { r -> (Math.floorDiv(r.first + 59, 60L) * 60..r.last step 60).toList() }.distinct()
+        val hrr = expand(shown(w, hr, end)).filter { s -> isValid(s.bpm) && ranges.any { s.timestamp in it } }
+            .map { it.timestamp to Recovery.hrr(it.bpm, restingHr, maxHr) }
+        return EnergyExpenditure.workoutMinutes(minutes, hrr, steps, profile, age, vo2max)
+    }
+
+    /** The sum of [minutes]. */
+    fun kcal(minutes: List<EnergyExpenditure.WorkoutMinute>): Kcal =
+        Kcal(minutes.sumOf { it.activeKcal.toDouble() }.toFloat(), minutes.sumOf { it.kcal.toDouble() }.toFloat())
+
+    /** [w] with its kcal saved from [minutes]; null [minutes] (no profile) leaves it without. */
+    fun withKcal(w: AppWorkout, minutes: List<EnergyExpenditure.WorkoutMinute>?): AppWorkout =
+        minutes?.let { kcal(it) }.let { w.copy(activeKcal = it?.active, totalKcal = it?.total) }
+
+    /**
+     * The running kcal while [w] records, from [minutes] ([kcalMinutes] with [now]): every minute that has ended, and
+     * the one under way for the share of it gone. Never below [previous], so the figure only climbs, even when a
+     * minute's mean heart rate drops before it ends or a history fill reworks one. With [active] (the workout's active
+     * ranges), a minute counts only for its seconds inside them, so a pause holds the figure instead of letting the
+     * minute it began in fill up with the clock.
+     */
+    fun liveKcal(minutes: List<EnergyExpenditure.WorkoutMinute>, now: Long, previous: Kcal? = null, active: List<LongRange>? = null): Kcal {
+        var activeKcal = 0.0
+        var total = 0.0
+        for (m in minutes) {
+            if (m.t > now) break
+            val hi = minOf(m.t + 60, now)
+            val seconds = active?.sumOf { r -> (minOf(hi, r.last + 1) - maxOf(m.t, r.first)).coerceAtLeast(0) } ?: (hi - m.t)
+            val share = (seconds / 60.0).coerceAtMost(1.0)
+            activeKcal += m.activeKcal * share
+            total += m.kcal * share
+        }
+        return Kcal(maxOf(activeKcal.toFloat(), previous?.active ?: 0f), maxOf(total.toFloat(), previous?.total ?: 0f))
+    }
+
+    /**
+     * Steps per minute start from the strap's running step totals ([totals]: time, total, oldest first), which come
+     * about once a minute while it is connected: each rise is spread over the seconds between its two totals. A total
+     * that falls (the day rolled over, the strap restarted) or comes more than [MAX_STEP_SPREAD_S] after the one before
+     * gives nothing; those minutes take what a sync brings. Each minute is held to 0..250, as the strap's own minutes.
+     */
+    fun minuteSteps(totals: List<Pair<Long, Int>>): Map<Long, Int> {
+        val out = HashMap<Long, Double>()
+        for (i in 1 until totals.size) {
+            val (t0, s0) = totals[i - 1]
+            val (t1, s1) = totals[i]
+            val span = t1 - t0
+            if (span <= 0 || span > MAX_STEP_SPREAD_S || s1 < s0) continue
+            var m = Math.floorDiv(t0, 60L) * 60
+            while (m < t1) {
+                val overlap = minOf(m + 60, t1) - maxOf(m, t0)
+                if (overlap > 0) out[m] = (out[m] ?: 0.0) + (s1 - s0) * overlap.toDouble() / span
+                m += 60
+            }
+        }
+        return out.mapValues { Math.round(it.value).toInt().coerceIn(0, 250) }
+    }
+
+    /**
+     * One tick of the live kcal ([liveKcal]) for [w] as it records at [now]: its [live] readings (time, bpm), the
+     * minutes a history fill wrote ([history]), steps from the strap's live totals ([stepTotals], [minuteSteps]) with
+     * the strap's own minutes ([syncedSteps]) taking over once a sync brings them. Never below [previous]; null
+     * without weight, height and age.
+     */
+    fun liveKcalTick(
+        w: AppWorkout, live: List<Pair<Long, Int>>, history: List<AppWorkoutHeartRate>, stepTotals: List<Pair<Long, Int>>,
+        syncedSteps: Map<Long, Int>, restingHr: Float, maxHr: Float, profile: UserProfile, age: Int?, vo2max: Float?,
+        now: Long, previous: Kcal?,
+    ): Kcal? {
+        val hr = (history.filter { it.fromHistory } + live.map { AppWorkoutHeartRate(w.start, it.first, it.second) }).sortedBy { it.timestamp }
+        val minutes = kcalMinutes(w, hr, minuteSteps(stepTotals) + syncedSteps, restingHr, maxHr, profile, age, vo2max, now) ?: return previous
+        return liveKcal(minutes, now, previous, Recovery.activeRanges(w, now))
+    }
+
+    /** Longer than this between two step totals, the strap was away: its steps aren't spread over the gap. */
+    const val MAX_STEP_SPREAD_S = 15 * 60L
 
     /** One lap: its number, when it began and ended, its average heart rate, and metres when there was GPS. */
     data class Lap(val index: Int, val start: Long, val end: Long, val averageHeartRate: Int?, val meters: Double?)

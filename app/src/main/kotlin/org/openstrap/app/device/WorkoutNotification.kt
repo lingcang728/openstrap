@@ -74,12 +74,15 @@ object WorkoutNotification {
             setInt(R.id.card, "setBackgroundResource", background)
             setTextViewText(R.id.sport, card.sport)
             setChronometer(R.id.time, base, null, card.running)
+            // Empty rather than gone, so it still pushes the bpm to the end.
+            setTextViewText(R.id.kcal, if (card.kcalCollapsed) card.kcal else "")
             setTextViewText(R.id.bpm, card.bpm)
             setTextColor(R.id.bpm, accent)
         }
         val expanded = RemoteViews(context.packageName, R.layout.notification_workout_expanded).apply {
             setInt(R.id.card, "setBackgroundResource", background)
             setChronometer(R.id.time, base, null, card.running)
+            setTextViewText(R.id.kcal, if (card.kcalExpanded) card.kcal else "")
             setTextViewText(R.id.bpm, card.bpm)
             setTextColor(R.id.bpm, accent)
             setTextViewTextSize(R.id.bpm, TypedValue.COMPLEX_UNIT_SP, if (reading) READING_SP else WORD_SP)
@@ -123,7 +126,7 @@ object WorkoutNotification {
         val card = NotificationCopy.card(
             Workouts.sportName(if (outdoor) 1 else 8), activeSeconds = 23 * 60 + 41, paused = paused, connected = true,
             bpm = 152, maxHr = 190, gps = outdoor, distanceMeters = 4210f, distanceFromSteps = false, target = null,
-            zoneSeconds = listOf(180, 420, 540, 260, 21), confirming = confirming,
+            zoneSeconds = listOf(180, 420, 540, 260, 21), confirming = confirming, activeKcal = 286f,
         )
         val open = PendingIntent.getActivity(
             context, SAMPLE_REQUEST,

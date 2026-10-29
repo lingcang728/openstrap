@@ -149,6 +149,8 @@ fun ListRow(
     dash: Boolean = true,
     icon: ImageVector? = null,
     iconTint: Color = color,
+    /** A goal's share (0..1): the icon's place shows a small ring filling to it in [color] instead (spec 2.7, Progress ring). */
+    ring: Float? = null,
 ) {
     val waiting = value == null && dash
     val accent = if (offNormal && !waiting) color else Color.White
@@ -166,7 +168,10 @@ fun ListRow(
             .padding(horizontal = bleed, vertical = GlowLayout.RowPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (icon != null) {
+        if (ring != null) {
+            RowRing(ring, color, Modifier.size(RowIcon))
+            Spacer(Modifier.width(RowIconGap))
+        } else if (icon != null) {
             Icon(icon, null, tint = iconTint.copy(alpha = iconTint.alpha * if (waiting) WAITING_ICON_ALPHA else 1f), modifier = Modifier.size(RowIcon))
             Spacer(Modifier.width(RowIconGap))
         }
@@ -191,6 +196,26 @@ fun ListRow(
             Spacer(Modifier.width(RowCaretGap))
             TapCaret(ROW_CARET_ALPHA)
         }
+    }
+}
+
+/**
+ * A row's progress ring (spec 2.7): a track of white at 12% and the [share] of a goal from the top, clockwise, in
+ * [color], round caps, as thick as an icon's stroke reads at 20 dp. Full once the goal is met.
+ */
+@Composable
+private fun RowRing(share: Float, color: Color, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier) {
+        val stroke = 2.5.dp.toPx()
+        val inset = stroke / 2 + 1.dp.toPx()
+        val box = androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2)
+        val at = Offset(inset, inset)
+        drawArc(Color.White.copy(alpha = 0.12f), 0f, 360f, false, at, box, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+        val sweep = 360f * share.coerceIn(0f, 1f)
+        if (sweep > 0f) drawArc(
+            color, -90f, sweep, false, at, box,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+        )
     }
 }
 

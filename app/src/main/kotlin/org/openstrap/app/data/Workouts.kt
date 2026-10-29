@@ -31,11 +31,19 @@ data class WorkoutAnalysis(
     val recordedEnd: Long? = null,
     /** Recovery time in minutes: the strap's sport effect, or OpenStrap's own for a phone workout ([WorkoutEffect]). */
     val recoveryMinutes: Int? = effect?.recoveryMinutes,
+    /** A phone workout's own recovery time, before what earlier ones left ([org.openstrap.app.data.db.AppWorkout.ownRecoveryMinutes]). */
+    val ownRecoveryMinutes: Int? = null,
     /** A phone workout's metres, from GPS or estimated from steps ([distanceFromSteps]); the strap stores none. */
     val distanceMeters: Float? = null,
     val distanceFromSteps: Boolean = false,
     /** A phone strength workout's finished sets; null when none were counted, and always for the strap's. */
     val sets: Int? = null,
+    /** A phone workout's saved active kcal ([org.openstrap.app.data.db.AppWorkout.activeKcal]); null for the strap's. */
+    val activeKcal: Float? = null,
+    /** A phone workout's target ([WorkoutTarget.code]); null for none and for the strap's. */
+    val target: String? = null,
+    /** Active seconds into the shown workout when its kcal target was reached; null when it wasn't, or not inside it. */
+    val targetReachedSeconds: Long? = null,
 ) {
     val durationSeconds: Long get() = end - shownStart
 
@@ -102,17 +110,70 @@ object Workouts {
         )
     }
 
+    /** The most of a strap record that may lie outside a phone workout for the two to be one: 10 min, or a quarter. */
+    const val SAME_WORKOUT_OUTSIDE_S = 600L
+    const val SAME_WORKOUT_OUTSIDE_SHARE = 0.25f
+
+    /** A phone workout's time as [sameWorkout] reads it: its shown start to its end, [now] while it records. */
+    fun phoneRange(p: org.openstrap.app.data.db.AppWorkout, now: Long): LongRange = p.from..(p.end ?: now)
+
+    /**
+     * Whether the strap workout over [strap] is the strap's own record of the phone workout over [phone], so the two
+     * are one workout: the strap auto-detects a walk minutes into it, and mirrors one started on the phone. They
+     * overlap, and little of the strap's lies outside: at most [SAME_WORKOUT_OUTSIDE_S], or [SAME_WORKOUT_OUTSIDE_SHARE]
+     * of it when longer. So a walk the strap noticed a few minutes before you tapped Start merges, and a gym session
+     * that began as your walk ended stays its own, both ways round.
+     */
+    fun sameWorkout(strap: LongRange, phone: LongRange): Boolean {
+        val overlap = minOf(strap.last, phone.last) - maxOf(strap.first, phone.first)
+        if (overlap <= 0) return false
+        val length = strap.last - strap.first
+        return length - overlap <= maxOf(SAME_WORKOUT_OUTSIDE_S, (length * SAME_WORKOUT_OUTSIDE_SHARE).toLong())
+    }
+
+    /** The share of a phone workout a strap record must cover for its figures to stand for the phone workout's. */
+    const val STRAP_EFFECT_COVER = 0.9f
+
+    /**
+     * Whether the strap record over [strap] covers nearly all of the phone workout over [phone] ([STRAP_EFFECT_COVER]),
+     * as a session it ran alongside does, so its own EPOC and training effect describe the whole workout. One the strap
+     * only noticed partway through doesn't: its figures are for part of it.
+     */
+    fun strapCovers(strap: LongRange, phone: LongRange): Boolean {
+        val length = phone.last - phone.first
+        val overlap = minOf(strap.last, phone.last) - maxOf(strap.first, phone.first)
+        return length > 0 && overlap >= length * STRAP_EFFECT_COVER && sameWorkout(strap, phone)
+    }
+
+    /**
+     * The workout of [rated] the time left to recover counts from: the one whose own recovery runs out last (its end
+     * plus [WorkoutAnalysis.ownRecoveryMinutes], else its whole time), so a short walk after a long one points at the
+     * long one, whose hours it carries.
+     */
+    fun recoverySource(rated: List<WorkoutAnalysis>): WorkoutAnalysis? =
+        rated.maxByOrNull { it.end + 60L * (it.ownRecoveryMinutes ?: it.recoveryMinutes ?: 0) }
+
+    /** The phone workout of [phone] that [w] is the strap's record of ([sameWorkout]), if any. */
+    fun phoneTwin(w: Workout, phone: List<org.openstrap.app.data.db.AppWorkout>, now: Long): org.openstrap.app.data.db.AppWorkout? =
+        phone.firstOrNull { sameWorkout(w.start..w.end, phoneRange(it, now)) }
+
+    /** Every strap record of [strap] that is the strap's own of the phone workout over [phone] ([sameWorkout]), by start. */
+    fun strapTwins(strap: List<Workout>, phone: LongRange): List<Workout> =
+        strap.filter { sameWorkout(it.start..it.end, phone) }.sortedBy { it.start }
+
     /**
      * The strap's workouts [ws] and the phone's [phone] as the workout lists show them, newest first: a strap workout's
      * end placed by its [last] HR sample or its effect, a phone strength workout with its count of finished [sets]
-     * (by start). Zones are left empty: the lists fill them in apart.
+     * (by start). A strap workout that is the strap's record of a phone one ([sameWorkout]) is left out, so a walk
+     * you started and the strap also noticed is one workout; its page still shows the strap's figures. Zones are
+     * left empty: the lists fill them in apart.
      */
     fun listed(
         ws: List<Workout>, effects: List<SportEffectRow>, last: List<WorkoutHeartRate>, phone: List<org.openstrap.app.data.db.AppWorkout>,
-        sets: Map<Long, Int>, maxHr: Int,
+        sets: Map<Long, Int>, maxHr: Int, now: Long = System.currentTimeMillis() / 1000,
     ): List<WorkoutAnalysis> {
         val lastByWorkout = last.associateBy { it.workoutStart }
-        val strap = ws.map { w -> analyse(w, listOfNotNull(lastByWorkout[w.start]), effects, maxHr) }
+        val strap = ws.filter { phoneTwin(it, phone, now) == null }.map { w -> analyse(w, listOfNotNull(lastByWorkout[w.start]), effects, maxHr) }
         return (strap + phone.map { WorkoutRecorder.analyse(it, emptyList(), maxHr).copy(sets = sets[it.start]) }).sortedByDescending { it.workout.start }
     }
 
@@ -163,6 +224,19 @@ object Workouts {
 
     /** Zepp's sport type ids (Type.type in the summary) for the sports a strap is likely to record. */
     fun sportName(type: Int): String = SPORT_NAMES[type] ?: "Workout"
+
+    /**
+     * [a]'s active kcal, rounded: a phone workout's saved figure; a strap workout's kcal less [bmrPerMinute] for each
+     * minute from its start to its stored end, as the day counts its minutes ([RecoveryEngine.energy]), never below
+     * zero. Without a profile ([bmrPerMinute] null) the strap's own figure stands. Null when there's no kcal at all.
+     */
+    fun activeKcal(a: WorkoutAnalysis, bmrPerMinute: Float?): Int? {
+        if (a.fromPhone) return (a.activeKcal ?: a.workout.calories?.toFloat())?.let(Math::round)
+        val kcal = a.workout.calories ?: return null
+        if (bmrPerMinute == null) return kcal
+        val minutes = (a.workout.end - a.workout.start) / 60f
+        return Math.round((kcal - bmrPerMinute * minutes).coerceAtLeast(0f))
+    }
 
     /** Every sport a workout can be started as, by name, one id per name (Zepp has two "Free training"). */
     val sports: List<Pair<Int, String>> by lazy {

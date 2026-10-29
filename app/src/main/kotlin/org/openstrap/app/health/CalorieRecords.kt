@@ -1,0 +1,48 @@
+package org.openstrap.app.health
+
+import org.openstrap.app.data.db.DailyEnergyRow
+import java.time.Instant
+import java.time.ZoneId
+
+/**
+ * What Health Connect gets of the stored days' energy ([DailyEnergyRow], calories spec 5): active kcal an hour, and
+ * the day's total once it's over and not partial. Workouts get none of their own: Health Connect's exercise session
+ * has no kcal, and a record over the workout would count its minutes again on top of their hours. Pure, so the split
+ * is tested without Health Connect.
+ */
+object CalorieRecords {
+    /** One record to write: its stable [id] (clientRecordId, less the app's prefix), its time and kcal. */
+    data class Span(val id: String, val start: Long, val end: Long, val kcal: Double, val version: Long)
+
+    /**
+     * Each local hour of [rows] with active kcal in it, as its own record: hour 0 to 23 from the day's local midnight
+     * in [zone], cut at [now] so the hour under way never ends in the future. An hour with none writes nothing.
+     */
+    fun activeHours(rows: List<DailyEnergyRow>, zone: ZoneId, now: Long): List<Span> = rows.flatMap { row ->
+        val date = Instant.ofEpochSecond(row.day).atZone(zone).toLocalDate()
+        row.hourlyKcal.withIndex().mapNotNull { (h, kcal) ->
+            if (h > 23 || kcal <= 0f) return@mapNotNull null
+            // A clock gap (spring forward) moves the hour on; that hour holds nothing anyway.
+            val start = date.atTime(h, 0).atZone(zone).toEpochSecond()
+            val end = minOf(start + 3600, now)
+            if (end <= start) return@mapNotNull null
+            Span("active:$start", start, end, kcal.toDouble(), row.updatedAt)
+        }
+    }
+
+    /** The day's total kcal, local midnight to midnight, for each of [rows] that's over by [now] and not partial. */
+    fun dayTotals(rows: List<DailyEnergyRow>, zone: ZoneId, now: Long): List<Span> = rows.mapNotNull { row ->
+        val end = dayEnd(row.day, zone)
+        if (row.partial || end > now || row.totalKcal <= 0f) return@mapNotNull null
+        Span("total:${row.day}", row.day, end, row.totalKcal.toDouble(), row.updatedAt)
+    }
+
+    /** Local midnight of the day [epoch] falls in, in [zone]. */
+    fun dayStart(epoch: Long, zone: ZoneId): Long = Instant.ofEpochSecond(epoch).atZone(zone).toLocalDate().atStartOfDay(zone).toEpochSecond()
+
+    /** The next local midnight after [day] (itself one), 23 to 25 hours on. */
+    fun dayEnd(day: Long, zone: ZoneId): Long = Instant.ofEpochSecond(day).atZone(zone).toLocalDate().plusDays(1).atStartOfDay(zone).toEpochSecond()
+
+    /** The span of whole local days [from] to [to] are in, for the stored days to write and the old records to clear. */
+    fun days(from: Long, to: Long, zone: ZoneId): Pair<Long, Long> = dayStart(from, zone) to dayEnd(dayStart(maxOf(from, to), zone), zone)
+}

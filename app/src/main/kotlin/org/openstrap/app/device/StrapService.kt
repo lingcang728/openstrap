@@ -289,7 +289,7 @@ class StrapService : LifecycleService() {
      * The workout notification. Where it shows as a Live Update (Android 16, not Samsung), it's promoted: a chip by the
      * status-bar clock with the running time, and on the lock screen. The clock runs on its own (a chronometer), so it
      * needs no posts to tick. The five zones are the progress bar's segments with a dot where the heart rate sits; a
-     * time target fills the bar toward the goal instead. Everywhere else it's the black card of [WorkoutNotification],
+     * time or kcal target fills the bar toward the goal instead. Everywhere else it's the black card of [WorkoutNotification],
      * custom views a Live Update can't have. Both say the same: [NotificationCopy.card].
      */
     private fun workoutNotification(r: WorkoutState.Recording, bpm: Int?, connected: Boolean, confirming: Boolean, session: WorkoutSession): Notification {
@@ -302,7 +302,7 @@ class StrapService : LifecycleService() {
         val target = WorkoutTarget.parse(w.target)
         val card = NotificationCopy.card(
             Workouts.sportName(w.sportType), active, r.paused, connected, bpm, r.maxHeartRate, w.useGps, w.distanceMeters,
-            w.distanceFromSteps, target, session.zoneSeconds.value.toList(), confirming,
+            w.distanceFromSteps, target, session.zoneSeconds.value.toList(), confirming, session.kcal.value?.active,
         )
         val actions = WorkoutNotification.actions(r.paused, confirming, ::service)
         if (!liveUpdatesShown()) return WorkoutNotification.build(this, card, actions, openApp()).build()
@@ -320,6 +320,11 @@ class StrapService : LifecycleService() {
                     style.setStyledByProgress(true)
                     style.setProgressSegments(listOf(NotificationCompat.ProgressStyle.Segment(target.seconds.toInt().coerceAtLeast(1)).setColor(color)))
                     style.setProgress(active.toInt().coerceAtMost(target.seconds.toInt()))
+                } else if (target is WorkoutTarget.Kcal) {
+                    // A kcal target fills toward its kcal the same way.
+                    style.setStyledByProgress(true)
+                    style.setProgressSegments(listOf(NotificationCompat.ProgressStyle.Segment(target.kcal.coerceAtLeast(1)).setColor(color)))
+                    style.setProgress((session.kcal.value?.active?.toInt() ?: 0).coerceIn(0, target.kcal))
                 } else {
                     // Bright up to the heart rate, faded after, like the app's zone bar and its gauges.
                     style.setStyledByProgress(true)
@@ -343,6 +348,8 @@ class StrapService : LifecycleService() {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setRequestPromotedOngoing(true)
             .apply { if (r.paused) setShortCriticalText("Paused") }
+            // In the header, after the running time.
+            .setSubText(card.kcal)
             .setContentIntent(openApp())
             .setShowWhen(true)
             .setUsesChronometer(!r.paused)

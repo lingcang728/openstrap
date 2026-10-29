@@ -2,6 +2,7 @@ package org.openstrap.app.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CoachingTest {
@@ -57,5 +58,53 @@ class CoachingTest {
         WorkoutTarget.presets.forEach { assertEquals(it, WorkoutTarget.parse(it.code)) }
         assertNull(WorkoutTarget.parse(null))
         assertNull(WorkoutTarget.parse("x:1"))
+    }
+
+    @Test
+    fun kcalTargetCodeAndLabel() {
+        assertEquals("k:300", WorkoutTarget.Kcal(300).code)
+        assertEquals("300 kcal", WorkoutTarget.Kcal(300).label)
+        assertEquals(WorkoutTarget.Kcal(500), WorkoutTarget.parse("k:500"))
+        assertNull(WorkoutTarget.parse("k:0"))
+        assertNull(WorkoutTarget.parse("k:abc"))
+    }
+
+    @Test
+    fun kcalPresetsOnlyWithAProfile() {
+        assertEquals(listOf(300, 500, 800), WorkoutTarget.offered(true).filterIsInstance<WorkoutTarget.Kcal>().map { it.kcal })
+        // After the ones there were.
+        assertEquals(WorkoutTarget.Time(60 * 60), WorkoutTarget.offered(true)[6])
+        assertTrue(WorkoutTarget.offered(false).none { it is WorkoutTarget.Kcal })
+        assertEquals(7, WorkoutTarget.offered(false).size)
+    }
+
+    @Test
+    fun kcalTargetBuzzesOnceWhenReached() {
+        val c = Coach(WorkoutTarget.Kcal(300))
+        assertNull(c.kcal(100, 120f))
+        assertNull(c.kcal(105, 299.9f))
+        assertNull(c.reachedAt)
+        assertEquals(Cue.GoalReached, c.kcal(110, 300f))
+        assertEquals(110L, c.reachedAt)
+        // The figure never goes down, and past the target it stays quiet.
+        assertNull(c.kcal(115, 340f))
+        assertNull(c.kcal(400, 900f))
+        assertEquals(110L, c.reachedAt)
+        // Readings don't buzz a kcal target: there's no time or zone to it.
+        assertNull(c.feed(120, 4, 5000))
+    }
+
+    @Test
+    fun kcalTargetReachedBeforeAPickUpNeverBuzzesAgain() {
+        val c = Coach(WorkoutTarget.Kcal(300), reachedAt = 900)
+        assertNull(c.kcal(1000, 320f))
+        assertEquals(900L, c.reachedAt)
+    }
+
+    @Test
+    fun otherTargetsIgnoreKcal() {
+        assertNull(Coach(WorkoutTarget.Time(600)).kcal(10, 5000f))
+        assertNull(Coach(WorkoutTarget.Zones(1, 2)).kcal(10, 5000f))
+        assertNull(Coach(null).kcal(10, 5000f))
     }
 }

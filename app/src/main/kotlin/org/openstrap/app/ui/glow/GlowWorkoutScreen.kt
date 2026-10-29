@@ -37,6 +37,7 @@ import org.openstrap.app.data.WorkoutRecorder
 import org.openstrap.app.data.Workouts
 import org.openstrap.app.ui.components.rememberScrubHaptics
 import org.openstrap.app.ui.components.scrub
+import org.openstrap.app.ui.dashboard.CaloriesCopy
 import org.openstrap.app.ui.dashboard.Metric
 import org.openstrap.app.ui.dashboard.Score
 import org.openstrap.app.ui.dashboard.ScreenList
@@ -81,6 +82,11 @@ fun GlowWorkoutDetailScreen(
     onDelete: () -> Unit,
     onTrim: (from: Long, to: Long) -> Unit = { _, _ -> },
     onUndoTrim: () -> Unit = {},
+    /** Your BMR a minute, for a strap workout's active kcal; null without a profile. */
+    bmrPerMinute: Float? = null,
+    /** The active kcal of the workout's day, for In your day, and the way to that day's Calories. */
+    dayActiveKcal: Float? = null,
+    onOpenDay: (() -> Unit)? = null,
 ) {
     BackHandler(onBack = onBack)
     val shown = if (a?.fromPhone == true) summary?.analysis else a
@@ -107,20 +113,30 @@ fun GlowWorkoutDetailScreen(
             val w = shown.workout
             item { WorkoutHero(shown, usual, zones) }
             if (shown.heartRate.isNotEmpty() || w.averageHeartRate != null) item { HeartRateCard(shown) }
+            val activeKcal = Workouts.activeKcal(shown, bmrPerMinute)
             val facts = WorkoutDetailCopy.facts(
                 shown.distanceMeters, shown.distanceFromSteps,
                 if (shown.fromPhone) (shown.durationSeconds - shown.activeSeconds).coerceAtLeast(0) else 0L, w.steps, w.calories,
-            )
+                activeKcal = activeKcal.takeIf { shown.fromPhone || bmrPerMinute != null },
+            ) + listOfNotNull(WorkoutDetailCopy.targetFact(shown.target, shown.targetReachedSeconds, shown.activeKcal?.roundToInt()))
             val factsShown = facts.isNotEmpty() || (phone?.route?.size ?: 0) >= 2
             if (factsShown) item { FactsList(facts, phone) }
+            // The workout's share of its day, right under its kcal (calories spec 4.2).
+            val today = LocalDate.now()
+            val inDay = activeKcal?.let { k ->
+                val date = Instant.ofEpochSecond(shown.shownStart).atZone(ZoneId.systemDefault()).toLocalDate()
+                CaloriesCopy.inYourDay(WorkoutDetailCopy.sport(w.sportType), k, dayActiveKcal?.roundToInt(), CaloriesCopy.dayWord(date, today), shown.fromPhone)
+            }
+            if (inDay != null) item { InYourDayCard(inDay, onOpenDay) }
             val drop = WorkoutDetailCopy.dropLine(shown.recovery60, shown.recoveryIsMeaningful, usualDrop)
             val loadShown = w.trainingLoad != null || (shown.recoveryMinutes ?: 0) > 0 || drop != null
             if (loadShown) item { LoadCard(shown, usual, best = null, drop = drop, onInfo = { info = true }) }
             // A list right under another would look the same, so the later one sits on a neutral edge card (spec 2.4):
-            // the zones when there's no Load card between them and the facts, else the splits under a plain list.
+            // the zones when the facts are right above them, else the splits under a plain list.
             val zonesShown = zones.sum() > 0
-            val zonesOnEdge = zonesShown && factsShown && !loadShown
-            val listAbove = if (zonesShown) !zonesOnEdge else factsShown && !loadShown
+            val factsRightAbove = factsShown && inDay == null && !loadShown
+            val zonesOnEdge = zonesShown && factsRightAbove
+            val listAbove = if (zonesShown) !zonesOnEdge else factsRightAbove
             if (zonesShown) item {
                 CompositionLocalProvider(LocalEdgeOverride provides if (zonesOnEdge) EdgeOverride(edge = Edge.Bottom) else EdgeOverride()) {
                     ZonesList(zones.toIntArray(), shown.maxHeartRate)
@@ -140,7 +156,7 @@ fun GlowWorkoutDetailScreen(
             }
         }
     }
-    if (info && shown != null) EffectInfo(shown, usual, phone?.strapWorkout, onDismiss = { info = false })
+    if (info && shown != null) EffectInfo(shown, usual, phone?.strapWorkouts.orEmpty(), phone?.effectFromStrap == true, onDismiss = { info = false })
 }
 
 /**
@@ -258,17 +274,34 @@ private fun ZoneHeartLine(
     }
 }
 
+/**
+ * In your day: what share of its day's active kcal the workout is ([CaloriesCopy.inYourDay]), lit from the left in
+ * Calories' Gold (about the day it's part of). Opens that day's Calories.
+ */
+@Composable
+private fun InYourDayCard(text: String, onOpen: (() -> Unit)?) {
+    EdgeCard(MetricColors.calories, Modifier.fillMaxWidth(), kind = EdgeKind.Earlier, onClick = onOpen) {
+        EdgeTitle("In your day", null)
+        Text(text, color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary, modifier = Modifier.padding(top = 8.dp))
+    }
+}
+
 /** The small facts ([WorkoutDetailCopy.facts]) as rows, and the map under them when the route was kept. */
 @Composable
 private fun FactsList(facts: List<WorkoutFact>, summary: PhoneSummary?) {
     ListPanel(title = "The workout") {
         facts.forEachIndexed { i, f ->
-            val color = if (f.name == "Paused") PausedColor else MetricColors.steps
+            val color = when (f.name) {
+                "Paused" -> PausedColor
+                "Calories", "Target" -> MetricColors.calories
+                else -> MetricColors.steps
+            }
             val icon = when (f.name) {
                 "Distance" -> Score.Distance.rowIcon()
                 "Paused" -> AppIcons.Hourglass
                 "Steps" -> Metric.Steps.rowIcon()
                 "Calories" -> Score.Energy.rowIcon()
+                "Target" -> AppIcons.Target
                 else -> null
             }
             ListRow(f.name, color, f.value, f.status, divider = i > 0, icon = icon)
@@ -279,15 +312,19 @@ private fun FactsList(facts: List<WorkoutFact>, summary: PhoneSummary?) {
 
 /** The (i) on the Load card: Load, training effect, time to recover, the heart rate drop and VO2 max explained. */
 @Composable
-private fun EffectInfo(a: WorkoutAnalysis, usual: Float?, strap: WorkoutAnalysis?, onDismiss: () -> Unit) {
+private fun EffectInfo(a: WorkoutAnalysis, usual: Float?, strap: List<WorkoutAnalysis>, fromStrap: Boolean, onDismiss: () -> Unit) {
     val w = a.workout
     val sheet = WorkoutDetailCopy.effectSheet(
         aerobic = w.aerobicTrainingEffect, anaerobic = w.anaerobicTrainingEffect, load = w.trainingLoad, usualLoad = usual,
         recoveryMinutes = a.recoveryMinutes, drop60 = a.recovery60, drop120 = a.recovery120, endBpm = a.endHeartRate,
         meaningfulDrop = a.recoveryIsMeaningful, vo2max = a.effect?.vo2max ?: w.vo2max?.toFloat(), fromPhone = a.fromPhone,
-        strap = strap?.let { s ->
-            EffectFigures(s.workout.aerobicTrainingEffect, s.workout.anaerobicTrainingEffect, s.workout.trainingLoad, s.recoveryMinutes)
+        strap = strap.map { s ->
+            EffectFigures(
+                s.workout.aerobicTrainingEffect, s.workout.anaerobicTrainingEffect, s.workout.trainingLoad, s.recoveryMinutes,
+                from = Instant.ofEpochSecond(s.workout.start).atZone(ZoneId.systemDefault()).toLocalTime().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),
+            )
         },
+        effectFromStrap = fromStrap, ownRecoveryMinutes = a.ownRecoveryMinutes, sportType = w.sportType,
     )
     InfoSheet(sheet.info, MetricColors.load, sheet.here, sheet.hereLine, onDismiss, rows = sheet.rows)
 }

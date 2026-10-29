@@ -235,19 +235,7 @@ class RecoveryEngine(private val dao: HealthDao) {
             DayWindow.of(monday, zone).from,
         )
 
-        // Energy: every minute of the day with data (a step record, heart rate, or sleep); no row is missing, never zero.
-        val todaySleep = sessions.flatMap { s -> (maxOf(s.start, day.from) / 60 * 60 until minOf(s.end, day.to + 1) step 60).toList() }.toSet()
-        val energyTimes = (minuteSteps.keys.filter { it in day.from..day.to } + weekHr.keys.filter { it in day.from..day.to } + todaySleep).toSortedSet()
-        val energy = EnergyExpenditure.day(
-            energyTimes.map { t ->
-                val w = workouts.firstOrNull { t in it.start until it.end }
-                EnergyExpenditure.Minute(
-                    t, minuteSteps[t], weekHr[t]?.let { Recovery.hrr(it, restingHr, maxHr) }, t in todaySleep || asleep(t),
-                    w?.calories?.let { kcal -> kcal / ((w.end - w.start) / 60f).coerceAtLeast(1f) },
-                )
-            },
-            profile, age, vo2?.value?.toFloat(),
-        )
+        val energy = energy(date, profile, restingHr, maxHr, vo2?.value?.toFloat(), zone, now)
 
         val loadTrend = if (loads.size >= 7) Recovery.fitnessFatigue(loads).last() else null
         val chronic = loadTrend?.ctl
@@ -297,6 +285,76 @@ class RecoveryEngine(private val dao: HealthDao) {
         val tested = profile.maxHeartRate
         if (tested != null) Recovery.maxHeartRate(profile.age(), strapMax, tested = tested).let { if (it == tested.toFloat()) return it }
         return maxHeartRate(profile, minuteHeartRate(loadFrom, to), strapMax, loadFrom, to, zone)
+    }
+
+    /**
+     * Energy for [date] ([RecoveryResult.energy]) on the given resting and max HR and VO2max, reading only that day:
+     * [compute] uses it, and so does the daily energy history for days nobody opened. Every minute with data (a step
+     * record, heart rate, sleep, or a phone workout's minute) counts; no row is missing, never zero. A phone workout's
+     * minutes take its own kcal ([phoneWorkoutKcal]), so the day counts what the workout says; a strap workout's are
+     * the strap's kcal pro-rated.
+     */
+    suspend fun energy(
+        date: LocalDate, profile: UserProfile, restingHr: Float, maxHr: Float, vo2max: Float?,
+        zone: ZoneId = ZoneId.systemDefault(), now: Long = System.currentTimeMillis() / 1000,
+    ): EnergyExpenditure.Day? {
+        val day = DayWindow.of(date, zone)
+        val age = profile.age()
+        val activity = dao.activityOnce(day.from, day.to)
+        val minuteSteps = activity.filter { it.steps in 0..250 }.associate { it.timestamp / 60 * 60 to it.steps }
+        val minuteHr = minuteHeartRate(day.from, day.to, activity).toMap()
+        val sessions = dao.sleepSessionsOnce(day.from, day.to)
+        val strap = dao.workoutsOnce(day.from, day.to)
+        val phone = HashMap<Long, Float>()
+        for (w in dao.appWorkoutsOnce(day.from, day.to)) {
+            phoneWorkoutKcal(w, profile, age, restingHr, maxHr, vo2max, now)?.forEach { if (it.t in day.from..day.to) phone[it.t] = it.kcal }
+        }
+        val sleep = sessions.flatMap { s -> (maxOf(s.start, day.from) / 60 * 60 until minOf(s.end, day.to + 1) step 60).toList() }.toSet()
+        val asleep = { t: Long -> t in sleep || sessions.any { t in it.start..it.end } }
+        val times = (minuteSteps.keys.filter { it in day.from..day.to } + minuteHr.keys.filter { it in day.from..day.to } + sleep + phone.keys).toSortedSet()
+        return EnergyExpenditure.day(
+            times.map { t ->
+                val w = strap.firstOrNull { t in it.start until it.end }
+                EnergyExpenditure.Minute(
+                    t, minuteSteps[t], minuteHr[t]?.let { Recovery.hrr(it, restingHr, maxHr) }, asleep(t),
+                    phone[t] ?: w?.calories?.let { kcal -> kcal / ((w.end - w.start) / 60f).coerceAtLeast(1f) },
+                )
+            },
+            profile, age, vo2max,
+        ) { Instant.ofEpochSecond(it).atZone(zone).hour }
+    }
+
+    /**
+     * [w]'s kcal per minute ([WorkoutRecorder.kcalMinutes]) from its heart rate and the strap's steps, fitted to its
+     * saved [AppWorkout.totalKcal] when it has one ([EnergyExpenditure.fitted]); a workout still recording, or one
+     * from before version 20, as worked out now. Null without a profile.
+     */
+    suspend fun phoneWorkoutKcal(
+        w: org.openstrap.app.data.db.AppWorkout, profile: UserProfile, age: Int?, restingHr: Float, maxHr: Float, vo2max: Float?,
+        now: Long = System.currentTimeMillis() / 1000, hr: List<org.openstrap.app.data.db.AppWorkoutHeartRate>? = null,
+    ): List<EnergyExpenditure.WorkoutMinute>? {
+        val b = EnergyExpenditure.bmrPerMinute(profile, age) ?: return null
+        val end = w.end ?: now
+        val steps = dao.activityOnce(w.from - 60, end + 60).filter { it.steps in 0..250 }.associate { it.timestamp / 60 * 60 to it.steps }
+        val minutes = WorkoutRecorder.kcalMinutes(w, hr ?: dao.appWorkoutHeartRateOnce(w.start), steps, restingHr, maxHr, profile, age, vo2max, now)
+            ?: return null
+        return EnergyExpenditure.fitted(minutes, w.totalKcal, b)
+    }
+
+    /**
+     * VO2max as of [date] by the rule [compute] uses ([RecoveryResult.vo2max]): Jurca as of the latest Monday, on
+     * the nightly resting HR of the two weeks before it. Null when withheld.
+     */
+    suspend fun vo2max(profile: UserProfile, date: LocalDate, zone: ZoneId = ZoneId.systemDefault()): Float? {
+        val monday = date.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+        val from = DayWindow.of(monday.minusDays(Vo2max.RHR_LOOKBACK_DAYS + 1L), zone).from
+        val to = DayWindow.of(monday, zone).to
+        val hr = minuteHeartRate(from, to)
+        val hrv = dao.hrvOnce(from, to)
+        val nights = mainsByMorning(dao.sleepSessionsOnce(from, to), zone).mapNotNull { (morning, s) ->
+            night(morning, s, hr, hrv, emptyList(), emptyList(), emptyList(), null).validRestingHr?.let { morning to it }
+        }.toMap()
+        return Vo2max.estimate(profile, profile.age(monday), nights, DayWindow.of(monday, zone).from).first?.value?.toFloat()
     }
 
     /** Live heart rate is stored several times a minute; the model works in minutes. */
