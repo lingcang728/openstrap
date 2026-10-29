@@ -4,6 +4,7 @@ import org.openstrap.app.data.db.AppWorkout
 import org.openstrap.app.data.db.AppWorkoutHeartRate
 import org.openstrap.app.data.db.Workout
 import org.openstrap.app.data.db.WorkoutHeartRate
+import org.openstrap.app.data.settings.UserProfile
 
 /**
  * A workout recorded on the phone, worked out in pure Kotlin like [Recovery]: which minutes the phone missed, how the
@@ -99,7 +100,7 @@ object WorkoutRecorder {
         end = w.end ?: now,
         sportType = w.sportType,
         exerciseSeconds = activeSeconds(w, now).toInt(),
-        calories = null,
+        calories = w.totalKcal?.let { Math.round(it) },
         averageHeartRate = stats?.average ?: w.averageHeartRate,
         maxHeartRate = stats?.max ?: w.maxHeartRate,
         minHeartRate = stats?.min,
@@ -134,6 +135,53 @@ object WorkoutRecorder {
     /** [w] with its stored average and peak worked out again over its shown range, for the lists. */
     fun withStats(w: AppWorkout, hr: List<AppWorkoutHeartRate>): AppWorkout =
         stats(shown(w, hr)).let { w.copy(averageHeartRate = it?.average, maxHeartRate = it?.max) }
+
+    /* ---------------------------------------------- Energy --------------------------------------------- */
+
+    /** A workout's kcal: above rest (what the workout shows) and in all. */
+    data class Kcal(val active: Float, val total: Float)
+
+    /**
+     * kcal for each active minute of [w] ([EnergyExpenditure.workoutMinutes]): the minute starts inside its shown range
+     * less its pauses (the one under way included), up to [now] while it records, with the heart rate of [hr] in them,
+     * live and history alike. [steps] is steps per minute start. Null without weight, height and age.
+     */
+    fun kcalMinutes(
+        w: AppWorkout, hr: List<AppWorkoutHeartRate>, steps: Map<Long, Int>, restingHr: Float, maxHr: Float,
+        profile: UserProfile, age: Int?, vo2max: Float?, now: Long = System.currentTimeMillis() / 1000,
+    ): List<EnergyExpenditure.WorkoutMinute>? {
+        val end = w.end ?: now
+        val ranges = Recovery.activeRanges(w, end).filter { !it.isEmpty() }
+        val minutes = ranges.flatMap { r -> (Math.floorDiv(r.first + 59, 60L) * 60..r.last step 60).toList() }.distinct()
+        val hrr = expand(shown(w, hr, end)).filter { s -> isValid(s.bpm) && ranges.any { s.timestamp in it } }
+            .map { it.timestamp to Recovery.hrr(it.bpm, restingHr, maxHr) }
+        return EnergyExpenditure.workoutMinutes(minutes, hrr, steps, profile, age, vo2max)
+    }
+
+    /** The sum of [minutes]. */
+    fun kcal(minutes: List<EnergyExpenditure.WorkoutMinute>): Kcal =
+        Kcal(minutes.sumOf { it.activeKcal.toDouble() }.toFloat(), minutes.sumOf { it.kcal.toDouble() }.toFloat())
+
+    /** [w] with its kcal saved from [minutes]; null [minutes] (no profile) leaves it without. */
+    fun withKcal(w: AppWorkout, minutes: List<EnergyExpenditure.WorkoutMinute>?): AppWorkout =
+        minutes?.let { kcal(it) }.let { w.copy(activeKcal = it?.active, totalKcal = it?.total) }
+
+    /**
+     * The running kcal while [w] records, from [minutes] ([kcalMinutes] with [now]): every minute that has ended, and
+     * the one under way for the share of it gone. Never below [previous], so the figure only climbs, even when a
+     * minute's mean heart rate drops before it ends or a history fill reworks one.
+     */
+    fun liveKcal(minutes: List<EnergyExpenditure.WorkoutMinute>, now: Long, previous: Kcal? = null): Kcal {
+        var active = 0.0
+        var total = 0.0
+        for (m in minutes) {
+            if (m.t > now) break
+            val share = ((now - m.t) / 60.0).coerceAtMost(1.0)
+            active += m.activeKcal * share
+            total += m.kcal * share
+        }
+        return Kcal(maxOf(active.toFloat(), previous?.active ?: 0f), maxOf(total.toFloat(), previous?.total ?: 0f))
+    }
 
     /** One lap: its number, when it began and ended, its average heart rate, and metres when there was GPS. */
     data class Lap(val index: Int, val start: Long, val end: Long, val averageHeartRate: Int?, val meters: Double?)

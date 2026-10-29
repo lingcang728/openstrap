@@ -561,6 +561,19 @@ interface HealthDao {
     @Query("SELECT * FROM night_metrics WHERE day BETWEEN :from AND :to ORDER BY day")
     suspend fun nightMetricsOnce(from: Long, to: Long): List<NightMetricsRow>
 
+    // Each day's energy as last worked out, for the history views and the export.
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDailyEnergy(rows: List<DailyEnergyRow>)
+
+    @Query("SELECT * FROM daily_energy WHERE day BETWEEN :from AND :to ORDER BY day")
+    suspend fun dailyEnergyOnce(from: Long, to: Long): List<DailyEnergyRow>
+
+    @Query("SELECT day FROM daily_energy")
+    suspend fun dailyEnergyDaysOnce(): List<Long>
+
+    @Query("UPDATE app_workout SET activeKcal = :activeKcal, totalKcal = :totalKcal WHERE start = :start")
+    suspend fun updateAppWorkoutKcal(start: Long, activeKcal: Float?, totalKcal: Float?)
+
     @Query("SELECT * FROM strap_readiness WHERE day BETWEEN :from AND :to ORDER BY day")
     suspend fun strapReadinessOnce(from: Long, to: Long): List<StrapReadinessRow>
 

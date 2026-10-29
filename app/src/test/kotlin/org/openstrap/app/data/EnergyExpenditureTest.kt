@@ -69,4 +69,76 @@ class EnergyExpenditureTest {
         assertEquals((480 * 0.95f + 960 * 1.15f) / 1440, full.pal!!, 1e-3f)
         assertTrue(full.palImplausible)
     }
+
+    @Test fun `active kcal is what's above rest, split by hour and source`() {
+        // One minute in each of the first four hours (UTC hours by default): asleep, sitting, walking, in a workout.
+        val d = EnergyExpenditure.day(
+            listOf(
+                Minute(0, null, null, asleep = true),
+                Minute(3600, 0, null, asleep = false),
+                Minute(7200, 100, null, asleep = false),
+                Minute(10_800, 0, null, asleep = false, workoutKcal = 9f),
+            ),
+            man, age,
+        )!!
+        val walk = EnergyExpenditure.net(3f, 70f) // 100 spm is 3 METs: 2·3.5·70/200 = 2.45 kcal above rest
+        // Sleep (0.95 b) is held at zero rather than taking anything off.
+        assertEquals(0.95f * b + 1.15f * b + (b + walk) + 9f, d.totalKcal, 1e-4f)
+        assertEquals(0.15f * b + walk + (9f - b), d.activeKcal, 1e-4f)
+        assertEquals(9f - b, d.workoutKcal, 1e-4f)
+        assertEquals(walk, d.walkingKcal, 1e-4f)
+        assertEquals(0.15f * b, d.everydayKcal, 1e-4f)
+        listOf(0f, 0.15f * b, 0f, 0f).forEachIndexed { h, v -> assertEquals(v, d.hourly.everyday[h], 1e-5f) }
+        assertEquals(walk, d.hourly.walking[2], 1e-5f)
+        assertEquals(9f - b, d.hourly.workout[3], 1e-5f)
+        assertEquals(d.activeKcal, d.hourly.total.sum(), 1e-4f)
+        // The local hour comes from the caller.
+        val shifted = EnergyExpenditure.day(listOf(Minute(7200, 100, null, false)), man, age) { 14 }!!
+        assertEquals(walk, shifted.hourly.walking[14], 1e-5f)
+    }
+
+    @Test fun `an HR-assisted minute is everyday, not walking`() {
+        val cycling = (0 until 10).map { Minute(it * 60L, 0, 0.5f, false) }
+        val d = EnergyExpenditure.day(cycling, man, age, vo2max = 42f)!!
+        assertEquals(10, d.hrAssistedMinutes)
+        assertEquals(10 * EnergyExpenditure.net(6f, 70f), d.everydayKcal, 1e-3f)
+        assertEquals(0f, d.walkingKcal, 0f)
+    }
+
+    @Test fun `in a workout heart rate leads from the first minute, capped at 90 percent of VO2max`() {
+        // VO2max 42 is 12 METs. At 50 % of reserve: 1 + 0.5·11 = 6.5 METs, above the everyday cap of 6.
+        val one = EnergyExpenditure.workoutMinutes(listOf(0L), (0L until 60L).map { it to 0.5f }, emptyMap(), man, age, vo2max = 42f)!!.single()
+        assertEquals(b + EnergyExpenditure.net(6.5f, 70f), one.kcal, 1e-4f)
+        assertEquals(EnergyExpenditure.net(6.5f, 70f), one.activeKcal, 1e-4f)
+        assertTrue(one.hrLed)
+        // Flat out (x = 1, 12 METs) is held at 0.9·12 = 10.8.
+        val hard = EnergyExpenditure.workoutMinutes(listOf(0L), (0L until 60L).map { it to 1f }, emptyMap(), man, age, vo2max = 42f)!!.single()
+        assertEquals(b + EnergyExpenditure.net(10.8f, 70f), hard.kcal, 1e-4f)
+        // Per sample, then the minute's mean: half the minute at 0 and half at 1 is the mean of 1 and 10.8 METs' kcal.
+        val mixed = EnergyExpenditure.workoutMinutes(listOf(0L), (0L until 60L).map { it to if (it < 30) 0f else 1f }, emptyMap(), man, age, vo2max = 42f)!!.single()
+        // Alone, x = 0 is b, below sitting's 1.15 b, and steps would lead; the minute's mean is well above both.
+        assertEquals(b + EnergyExpenditure.net(10.8f, 70f) / 2, mixed.kcal, 1e-4f)
+    }
+
+    @Test fun `a walk at a low heart rate keeps its cadence MET`() {
+        // 120 spm is 5 METs; x = 0.1 at the default VO2max 35 (10 METs) is 1.9 METs.
+        val walk = EnergyExpenditure.workoutMinutes(listOf(0L), (0L until 60L).map { it to 0.1f }, mapOf(0L to 120), man, age)!!.single()
+        assertEquals(b + EnergyExpenditure.net(5f, 70f), walk.kcal, 1e-4f)
+        assertFalse(walk.hrLed)
+        // A minute without heart rate or steps is sitting, still above rest.
+        val still = EnergyExpenditure.workoutMinutes(listOf(0L), emptyList(), emptyMap(), man, age)!!.single()
+        assertEquals(1.15f * b, still.kcal, 1e-4f)
+        assertNull(EnergyExpenditure.workoutMinutes(listOf(0L), emptyList(), emptyMap(), man.copy(heightCm = null), age))
+    }
+
+    @Test fun `fitted minutes keep their shape and add up to the saved total`() {
+        val minutes = listOf(
+            EnergyExpenditure.WorkoutMinute(0, b + 4f, 4f, true),
+            EnergyExpenditure.WorkoutMinute(60, b + 8f, 8f, true),
+        )
+        val fitted = EnergyExpenditure.fitted(minutes, totalKcal = 2 * b + 18f, b = b)
+        assertEquals(listOf(6f, 12f), fitted.map { it.activeKcal })
+        assertEquals(2 * b + 18f, fitted.sumOf { it.kcal.toDouble() }.toFloat(), 1e-4f)
+        assertEquals(minutes, EnergyExpenditure.fitted(minutes, null, b))
+    }
 }

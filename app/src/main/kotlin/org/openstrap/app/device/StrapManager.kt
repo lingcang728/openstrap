@@ -736,6 +736,7 @@ class StrapManager(
                 }
                 runCatching { notifyBodySignals() }.onFailure { log("body signals: $it") }
                 runCatching { WorkoutGapFill(dao) { settings.profile.first() }.run()?.let { log(it) } }.onFailure { log("workout gap fill: $it") }
+                runCatching { updateDailyEnergy() }.onFailure { log("daily energy: $it") }
                 // Everything a widget shows may have moved (widgets spec 7).
                 WidgetUpdater.changedAll(context)
             } finally {
@@ -759,6 +760,18 @@ class StrapManager(
         if (body.day != day || body.state != org.openstrap.app.data.BodySignals.State.Alert) return
         healthAlerts.showBodySignals(body.families, body.nightsOff)
         settings.setLastSync(BODY_SIGNALS_PUSHED, day)
+    }
+
+    /**
+     * After a sync, keeps each day's energy row ([org.openstrap.app.data.DailyEnergyHistory]): the first time every day
+     * with data, then the recent days, and all of them again when the profile they were worked out with has changed.
+     */
+    private suspend fun updateDailyEnergy() {
+        val profile = settings.profile.first()
+        val key = org.openstrap.app.data.DailyEnergyHistory.profileKey(profile)
+        val written = org.openstrap.app.data.DailyEnergyHistory(dao).update(profile, profileChanged = settings.lastSync(DAILY_ENERGY_PROFILE) != key)
+        settings.setLastSync(DAILY_ENERGY_PROFILE, key)
+        if (written > 0) log("daily energy: $written days")
     }
 
     /** Debug aid, see [HistorySync.dumpRaw]. */
@@ -1197,6 +1210,8 @@ class StrapManager(
         const val WEAR_POLL_MS = 60_000L
         /** Settings key: the local midnight of the last morning a body-signal alert was pushed. */
         const val BODY_SIGNALS_PUSHED = "body_signals_push"
+        /** [org.openstrap.app.data.DailyEnergyHistory.profileKey] of the profile the daily energy rows were last written with. */
+        const val DAILY_ENERGY_PROFILE = "daily_energy_profile"
         const val AUTO_SYNC_SECONDS = 60 * 60L
         val KEEP_ALIVE_REPLY = byteArrayOf(0x05, 0x02)
         /** The pulsed call buzz: 600 ms on the motor, once a second. */

@@ -176,4 +176,72 @@ class WorkoutRecorderTest {
         assertTrue(a.distanceFromSteps)
         assertNull(a.sets)
     }
+
+    /* ---------------------------------------------- Energy --------------------------------------------- */
+
+    private val man = org.openstrap.app.data.settings.UserProfile(sex = org.openstrap.app.data.settings.UserProfile.Sex.Male, weightKg = 70f, heightCm = 175)
+    private val age = 30
+    private val b = EnergyExpenditure.bmr(70f, 175, 30, org.openstrap.app.data.settings.UserProfile.Sex.Male) / 1440f
+    private fun live(from: Long, until: Long, bpm: (Long) -> Int) = (from until until).map { AppWorkoutHeartRate(start, it, bpm(it)) }
+    private fun minutes(w: AppWorkout, hr: List<AppWorkoutHeartRate>, steps: Map<Long, Int> = emptyMap(), now: Long = w.end ?: start) =
+        WorkoutRecorder.kcalMinutes(w, hr, steps, restingHr = 60f, maxHr = 190f, profile = man, age = age, vo2max = 42f, now = now)!!
+
+    @Test
+    fun workoutKcalLeavesOutPausedMinutesAndCountsHistoryOnes() {
+        // 10 minutes, paused from 2:00 to 3:59; live at 150 bpm except minute 1, which a history row fills.
+        val w = AppWorkout(start, start + 600, 1, pauses = "${start + 120}-${start + 239}")
+        val hr = live(start, start + 600) { 150 }.filter { it.timestamp !in start + 60 until start + 120 } +
+            AppWorkoutHeartRate(start, start + 60, 150, fromHistory = true)
+        val m = minutes(w, hr.sortedBy { it.timestamp })
+        assertEquals(listOf(0, 1, 4, 5, 6, 7, 8, 9).map { start + it * 60L }, m.map { it.t })
+        // x = 90/130 at VO2max 42 (12 METs): 1 + x·11 ≈ 8.6 METs, under the 10.8 cap; every minute alike.
+        val met = 1f + 90f / 130f * 11f
+        m.forEach { assertEquals(b + EnergyExpenditure.net(met, 70f), it.kcal, 1e-3f) }
+        val kcal = WorkoutRecorder.kcal(m)
+        assertEquals(8 * EnergyExpenditure.net(met, 70f), kcal.active, 1e-2f)
+        assertEquals(kcal.active + 8 * b, kcal.total, 1e-2f)
+    }
+
+    @Test
+    fun liveKcalNeverGoesDown() {
+        val w = AppWorkout(start, null, 1)
+        // 30 s in: one reading at 190 bpm (flat out), half a minute gone.
+        val first = WorkoutRecorder.liveKcal(minutes(w, live(start, start + 1) { 190 }, now = start + 30), start + 30)
+        assertEquals(EnergyExpenditure.net(10.8f, 70f) / 2, first.active, 1e-3f)
+        // 59 s in: the rest of the minute at resting heart rate drags the minute's mean down; the figure holds.
+        val calm = live(start, start + 59) { if (it == start) 190 else 60 }
+        val raw = WorkoutRecorder.liveKcal(minutes(w, calm, now = start + 59), start + 59)
+        assertTrue(raw.active < first.active)
+        val second = WorkoutRecorder.liveKcal(minutes(w, calm, now = start + 59), start + 59, previous = first)
+        assertEquals(first, second)
+        // Ten minutes on at 150 bpm it climbs again.
+        val later = calm + live(start + 59, start + 600) { 150 }
+        val third = WorkoutRecorder.liveKcal(minutes(w, later, now = start + 600), start + 600, previous = second)
+        assertTrue(third.active > second.active && third.total > second.total)
+    }
+
+    @Test
+    fun aDayCountsItsPhoneWorkoutExactly() {
+        // 30 minutes: 150 bpm for 15, then 120; the last ten minutes walked at 120 spm.
+        val w = AppWorkout(start, start + 1800, 1)
+        val steps = (20 until 30).associate { start + it * 60L to 120 }
+        val m = minutes(w, live(start, start + 1800) { if (it < start + 900) 150 else 120 }, steps)
+        val kcal = WorkoutRecorder.kcal(m)
+        fun day(saved: Float?): EnergyExpenditure.Day {
+            val inWorkout = EnergyExpenditure.fitted(m, saved, b).map { EnergyExpenditure.Minute(it.t, steps[it.t], null, false, it.kcal) }
+            val before = (60 downTo 1).map { EnergyExpenditure.Minute(start - it * 60L, 0, null, false) }
+            return EnergyExpenditure.day(before + inWorkout, man, age, vo2max = 42f)!!
+        }
+        val d = day(kcal.total)
+        assertEquals(kcal.active, d.workoutKcal, 1e-2f)
+        assertEquals(kcal.total + 60 * 1.15f * b, d.totalKcal, 1e-2f)
+        // The walked minutes are the workout's, not walking.
+        assertEquals(0f, d.walkingKcal, 0f)
+        // A saved total that differs from today's working (older inputs) is still what the day counts.
+        val other = day(kcal.total + 50f)
+        assertEquals(kcal.active + 50f, other.workoutKcal, 1e-2f)
+        assertEquals(kcal.total + 50f + 60 * 1.15f * b, other.totalKcal, 1e-2f)
+        // And the workout as listed carries the same total.
+        assertEquals(Math.round(kcal.total), WorkoutRecorder.toWorkout(WorkoutRecorder.withKcal(w, m), start + 1800).calories)
+    }
 }

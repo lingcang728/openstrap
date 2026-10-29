@@ -202,6 +202,13 @@ data class AppWorkout(
     val aerobicTrainingEffect: Float? = null,
     val recoveryMinutes: Int? = null,
     val vo2max: Float? = null,
+    /**
+     * kcal over the shown range less pauses, above rest and in all ([org.openstrap.app.data.EnergyExpenditure.workoutMinutes]).
+     * Worked out when it ends and again on a trim or a gap fill; null without a profile, and on workouts from before
+     * version 20 until the daily energy history fills them in.
+     */
+    val activeKcal: Float? = null,
+    val totalKcal: Float? = null,
 ) {
     val lapMarks: List<Long> get() = laps.split(',').mapNotNull { it.toLongOrNull() }
 
@@ -507,3 +514,26 @@ data class HabitAgeWeekRow(
     val high: Int,
     val updatedAt: Long,
 )
+
+/**
+ * One local day's energy as the engine last worked it out ([org.openstrap.app.data.EnergyExpenditure.Day]), so week,
+ * month and year views don't run the model for every day. Rewritten whenever the day is worked out again.
+ */
+@Entity(tableName = "daily_energy")
+data class DailyEnergyRow(
+    /** Local midnight of the day, epoch seconds. */
+    @PrimaryKey val day: Long,
+    val updatedAt: Long,
+    val totalKcal: Float,
+    val activeKcal: Float,
+    val bmrKcal: Float,
+    val minutesWithData: Int,
+    val partial: Boolean,
+    /** Active kcal in workout minutes, and in walking minutes outside them. */
+    val workoutKcal: Float,
+    val walkingKcal: Float,
+    /** Active kcal for each local hour, 0 to 23, comma separated; see [hourlyKcal]. */
+    val hourly: String,
+) {
+    val hourlyKcal: List<Float> get() = hourly.split(',').map { it.toFloatOrNull() ?: 0f }
+}

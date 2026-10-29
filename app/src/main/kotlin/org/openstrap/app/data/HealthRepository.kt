@@ -53,11 +53,12 @@ class HealthRepository(private val dao: HealthDao) {
 
     /**
      * Readiness and charge for [date]; heavy, so call it off the main thread. Also logs the night's own inputs next to
-     * the strap's ([NightMetricsRow]) for the calibration review.
+     * the strap's ([NightMetricsRow]) for the calibration review, and keeps the day's energy ([DailyEnergyHistory]).
      */
     suspend fun recovery(date: LocalDate, profile: org.openstrap.app.data.settings.UserProfile): RecoveryResult {
         val r = recoveryEngine.compute(date, profile)
         r.tonight?.let { logNight(it) }
+        r.energy?.let { dao.insertDailyEnergy(listOf(DailyEnergyHistory.row(DayWindow.of(date).from, it, System.currentTimeMillis() / 1000))) }
         return r
     }
 

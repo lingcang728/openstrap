@@ -24,10 +24,10 @@ class WorkoutEffectEngine(private val dao: HealthDao) {
     ): AppWorkout {
         val end = w.end ?: return w
         val from = w.from
-        val maxHr = RecoveryEngine(dao).maxHeartRate(profile, Instant.ofEpochSecond(from).atZone(zone).toLocalDate(), zone)
-        val restingHr = Recovery.daytimeRestingHr(
-            dao.restingHrOnce(from - Recovery.RHR_DAYS * DAY, from).associate { it.day to it.bpm.toFloat() }, emptyMap(), dayStart(from, zone),
-        ) ?: DEFAULT_RESTING_HR
+        val engine = RecoveryEngine(dao)
+        val date = Instant.ofEpochSecond(from).atZone(zone).toLocalDate()
+        val maxHr = engine.maxHeartRate(profile, date, zone)
+        val restingHr = restingHr(from, zone)
 
         val loads = earlierLoads(w, zone)
         val load28 = loads.filter { it.first >= from - 28 * DAY }.sumOf { it.second.toDouble() }.toFloat()
@@ -44,11 +44,35 @@ class WorkoutEffectEngine(private val dao: HealthDao) {
             w.sportType, shownHr, from, end, w.pauseRanges, points?.filter { it.t in from..end }.orEmpty(),
             restingHr, maxHr, load28, trend, carriedMinutes(w),
         )
-        return w.copy(
+        // kcal from scratch over the range as it now stands, so the saved total isn't fitted to the old one.
+        val kcal = runCatching { engine.phoneWorkoutKcal(w.copy(totalKcal = null), profile, profile.age(date), restingHr, maxHr, engine.vo2max(profile, date, zone), end, hr) }
+            .getOrNull()
+        return WorkoutRecorder.withKcal(w, kcal).copy(
             epoc = r.epoc, aerobicTrainingEffect = r.aerobicTe, recoveryMinutes = r.recoveryMinutes,
             vo2max = if (points == null) w.vo2max else r.vo2max,
         )
     }
+
+    /**
+     * Works out and saves the kcal of a finished workout that has none yet (one from before version 20), without
+     * touching its effect. Nothing is written without a profile.
+     */
+    suspend fun backfillKcal(w: AppWorkout, profile: UserProfile, zone: ZoneId = ZoneId.systemDefault()) {
+        val end = w.end ?: return
+        if (w.totalKcal != null) return
+        val engine = RecoveryEngine(dao)
+        val date = Instant.ofEpochSecond(w.from).atZone(zone).toLocalDate()
+        val minutes = engine.phoneWorkoutKcal(
+            w, profile, profile.age(date), restingHr(w.from, zone), engine.maxHeartRate(profile, date, zone), engine.vo2max(profile, date, zone), end,
+        ) ?: return
+        val kcal = WorkoutRecorder.kcal(minutes)
+        dao.updateAppWorkoutKcal(w.start, kcal.active, kcal.total)
+    }
+
+    /** Daytime resting HR at [t]: the strap's daily values over [Recovery.RHR_DAYS], else [DEFAULT_RESTING_HR]. */
+    private suspend fun restingHr(t: Long, zone: ZoneId): Float = Recovery.daytimeRestingHr(
+        dao.restingHrOnce(t - Recovery.RHR_DAYS * DAY, t).associate { it.day to it.bpm.toFloat() }, emptyMap(), dayStart(t, zone),
+    ) ?: DEFAULT_RESTING_HR
 
     /** Works out and saves the figures of a finished workout that has none yet (one from before version 14). */
     suspend fun backfill(w: AppWorkout, profile: UserProfile) {
