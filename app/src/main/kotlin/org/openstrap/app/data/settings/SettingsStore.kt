@@ -114,6 +114,19 @@ enum class BuzzPattern(val label: String, val millis: List<Int>) {
 /** How the strap buzzes while a call rings: the find-device buzz without a break, or 600 ms motor pulses once a second. */
 enum class CallBuzz(val label: String) { STEADY("Steady"), PULSED("Pulsed") }
 
+/**
+ * Hours the strap stays still for notifications, such as the night: from [from] to [to] in minutes after midnight,
+ * running past midnight when [to] comes first. Calls still ring unless [calls] mutes them too.
+ */
+data class QuietHours(val on: Boolean = false, val from: Int = 22 * 60, val to: Int = 7 * 60, val calls: Boolean = false) {
+    /** True when [minute] (after midnight) falls inside the hours. A window whose ends match is empty. */
+    fun covers(minute: Int): Boolean = on && when {
+        from == to -> false
+        from < to -> minute in from until to
+        else -> minute >= from || minute < to
+    }
+}
+
 class SettingsStore(private val context: Context) {
     private val address = stringPreferencesKey("device_address")
     private val authKey = stringPreferencesKey("device_auth_key")
@@ -372,7 +385,7 @@ class SettingsStore(private val context: Context) {
     /** Forgets the strap and the Zepp sign-in; the user's profile and goals stay. */
     suspend fun forgetDevice() {
         context.dataStore.edit { prefs ->
-            val keep = setOf(birthYear, sex, weight, height, imperial, sleepNeed, maxHr, activityLevel, activityAt, bodyAt, betaBlocker, pregnant, stepGoal, sleepGoal, activeGoal, calorieGoal, todayHidden, todayPinned, hcAuto, hcSynced, hcStopped, buzzCalls, buzzNotifications, buzzPattern, callBuzz, backupFolder, backupFolderName, backupDone, backupFailed, backupFailedAt)
+            val keep = setOf(birthYear, sex, weight, height, imperial, sleepNeed, maxHr, activityLevel, activityAt, bodyAt, betaBlocker, pregnant, stepGoal, sleepGoal, activeGoal, calorieGoal, todayHidden, todayPinned, hcAuto, hcSynced, hcStopped, buzzCalls, buzzNotifications, buzzPattern, callBuzz, quietOn, quietFrom, quietTo, quietCalls, backupFolder, backupFolderName, backupDone, backupFailed, backupFailedAt)
             prefs.asMap().keys.filter { it !in keep }.forEach { prefs.remove(it) }
         }
     }
@@ -448,6 +461,26 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setBuzzOnNotifications(enabled: Boolean) {
         context.dataStore.edit { it[buzzNotifications] = enabled }
+    }
+
+    private val quietOn = androidx.datastore.preferences.core.booleanPreferencesKey("quiet_hours")
+    private val quietFrom = androidx.datastore.preferences.core.intPreferencesKey("quiet_from_minutes")
+    private val quietTo = androidx.datastore.preferences.core.intPreferencesKey("quiet_to_minutes")
+    private val quietCalls = androidx.datastore.preferences.core.booleanPreferencesKey("quiet_calls")
+
+    /** When the strap doesn't buzz for notifications; off by default, 22:00 to 07:00 once turned on. */
+    val quietHours: Flow<QuietHours> = context.dataStore.data.map { prefs ->
+        val d = QuietHours()
+        QuietHours(prefs[quietOn] == true, prefs[quietFrom] ?: d.from, prefs[quietTo] ?: d.to, prefs[quietCalls] == true)
+    }
+
+    suspend fun setQuietHours(q: QuietHours) {
+        context.dataStore.edit {
+            it[quietOn] = q.on
+            it[quietFrom] = q.from.mod(24 * 60)
+            it[quietTo] = q.to.mod(24 * 60)
+            it[quietCalls] = q.calls
+        }
     }
 
     private val strapBattery = androidx.datastore.preferences.core.intPreferencesKey("strap_battery")

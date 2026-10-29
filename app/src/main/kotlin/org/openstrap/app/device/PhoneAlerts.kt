@@ -15,6 +15,7 @@ import android.service.notification.StatusBarNotification
 import android.telephony.PhoneStateListener
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
+import java.time.LocalTime
 import java.util.concurrent.atomic.AtomicInteger
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
@@ -31,12 +32,14 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.openstrap.app.data.settings.BuzzPattern
 import org.openstrap.app.data.settings.CallBuzz
+import org.openstrap.app.data.settings.QuietHours
 import org.openstrap.app.data.settings.SettingsStore
 
 /**
  * Buzzes the strap for phone calls and notifications. The strap has no notification module (Zepp leaves the
  * feature off for it), so a ringing call uses its find-device buzz until the call is answered or ends, and a
- * notification plays a short motor pattern (docs/protocol/01 §5.8). Both follow Do Not Disturb. Calls from apps
+ * notification plays a short motor pattern (docs/protocol/01 §5.8). Both follow Do Not Disturb, and the user's quiet
+ * hours hold notifications back (calls too, when they chose so). Calls from apps
  * (WhatsApp, Telegram, Teams) never reach the call state, so their incoming call notification and the phone's
  * ringtone audio mode count as ringing too, while notification access is on. A ringing call wins:
  * [StrapController.startCallBuzz] drops other buzzes until the stop, and a call notification holds them back
@@ -56,6 +59,7 @@ class PhoneAlerts(
         private set
     @Volatile private var pattern = BuzzPattern.TWO_SHORT
     @Volatile private var callStyle = CallBuzz.STEADY
+    @Volatile private var quiet = QuietHours()
 
     /** Re-checked by [refresh]; the screen calls it on resume, after the user may have granted access. */
     val callPermission = MutableStateFlow(hasCallPermission())
@@ -78,6 +82,7 @@ class PhoneAlerts(
         }
         scope.launch { settings.notificationPattern.collect { pattern = it } }
         scope.launch { settings.callBuzzStyle.collect { callStyle = it } }
+        scope.launch { settings.quietHours.collect { quiet = it } }
     }
 
     fun refresh() {
@@ -212,6 +217,7 @@ class PhoneAlerts(
     private fun startRinging() {
         if (ringing?.isActive == true) return
         ringing = scope.launch {
+            if (quiet.calls && quietNow()) { log("call ringing: held back by quiet hours"); return@launch }
             val allowed = dndAllowsAnyCaller()
             val filter = context.getSystemService(NotificationManager::class.java).currentInterruptionFilter
             log("call ringing: ${if (allowed) "buzz" else "held back by Do Not Disturb"} (interruption filter $filter)")
@@ -292,12 +298,15 @@ class PhoneAlerts(
         }
         if (callRinging || now - callNoticeAt < CALL_NOTICE_HOLD_MS) return
         if (!notificationsOn || !shouldBuzz(sbn, ranking, update)) return
+        if (quietNow()) return
         synchronized(this) {
             if (now - lastBuzz < MIN_GAP_MS) return
             lastBuzz = now
         }
         scope.launch { runCatching { strap.buzz(pattern.millis) } }
     }
+
+    private fun quietNow(): Boolean = LocalTime.now().let { quiet.covers(it.hour * 60 + it.minute) }
 
     /** Called by [StrapNotificationListener]: a calling app's notification going away ends its ringing. */
     fun onNotificationRemoved(key: String) = ringEnded(key)

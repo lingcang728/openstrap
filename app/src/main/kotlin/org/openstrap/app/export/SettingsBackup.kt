@@ -42,6 +42,10 @@ object SettingsBackup {
         "buzz_pattern" to Type.STRING,
         "call_buzz" to Type.STRING,
         "update_auto" to Type.BOOLEAN,
+        "quiet_hours" to Type.BOOLEAN,
+        "quiet_from_minutes" to Type.INT,
+        "quiet_to_minutes" to Type.INT,
+        "quiet_calls" to Type.BOOLEAN,
     )
 
     /** The backed-up keys of [values] as JSON; anything else in it is left out. */
