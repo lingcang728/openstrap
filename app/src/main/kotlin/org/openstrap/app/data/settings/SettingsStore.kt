@@ -527,6 +527,39 @@ class SettingsStore(private val context: Context) {
     }
 
     /** The settings a backup carries ([org.openstrap.app.export.SettingsBackup.KEYS]), by key name, as stored. */
+    private val updateAutoKey = androidx.datastore.preferences.core.booleanPreferencesKey("update_auto")
+    private val updateCheckedKey = longPreferencesKey("update_checked_at")
+    private val updateNotifiedKey = stringPreferencesKey("update_notified_tag")
+    private val updateInstallingKey = stringPreferencesKey("update_installing_tag")
+
+    /** The daily check for a new OpenStrap release on GitHub ([org.openstrap.app.update.AppUpdater]). On unless turned off. */
+    val updateAuto: Flow<Boolean> = context.dataStore.data.map { it[updateAutoKey] ?: true }
+
+    suspend fun setUpdateAuto(on: Boolean) {
+        context.dataStore.edit { it[updateAutoKey] = on }
+    }
+
+    /** When the release list was last read from GitHub, epoch seconds. */
+    val updateChecked: Flow<Long?> = context.dataStore.data.map { it[updateCheckedKey] }
+
+    suspend fun setUpdateChecked(epochSeconds: Long) {
+        context.dataStore.edit { it[updateCheckedKey] = epochSeconds }
+    }
+
+    /** The tag of the last release the daily check notified about, so each one is said once. */
+    suspend fun updateNotified(): String? = context.dataStore.data.first()[updateNotifiedKey]
+
+    suspend fun setUpdateNotified(tag: String) {
+        context.dataStore.edit { it[updateNotifiedKey] = tag }
+    }
+
+    /** The tag of the release handed to Android to install, until the new version starts; null when none. */
+    suspend fun updateInstalling(): String? = context.dataStore.data.first()[updateInstallingKey]
+
+    suspend fun setUpdateInstalling(tag: String?) {
+        context.dataStore.edit { if (tag == null) it.remove(updateInstallingKey) else it[updateInstallingKey] = tag }
+    }
+
     suspend fun backupValues(): Map<String, Any> =
         context.dataStore.data.first().asMap().mapKeys { it.key.name }.filterKeys { it in org.openstrap.app.export.SettingsBackup.KEYS }
 

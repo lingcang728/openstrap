@@ -2,8 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- INTERNET is used only for Zepp sign-in (device list) and strap firmware checks and downloads. Health data is never uploaded. -->
+    <!-- INTERNET is used only for Zepp sign-in (device list), strap firmware checks and downloads, map tiles, and the
+         daily check for a new OpenStrap on GitHub and its download. Health data is never uploaded. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Installing a new OpenStrap downloaded from its GitHub releases (update/AppUpdater.kt). Android asks the user to
+         allow it the first time. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
@@ -183,6 +187,15 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_start" />
+        </receiver>
+
+        <!-- The package installer's report on an update, and Android saying the app was replaced (update/UpdateReceiver.kt). -->
+        <receiver
+            android:name=".update.UpdateReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
         </receiver>
 
         <!-- The widgets' moment and midnight alarms (WidgetUpdater). Not a widget. -->

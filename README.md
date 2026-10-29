@@ -48,7 +48,7 @@ I use it every day with one strap on one Android 16 phone. Other phones and firm
 
 ## Install
 
-Download the APK from the [latest release](https://github.com/sayed0am/openstrap/releases/latest) and open it on your phone (Android 9 or newer). Updates install over the old version and keep your data.
+Download the APK from the [latest release](https://github.com/sayed0am/openstrap/releases/latest) and open it on your phone (Android 9 or newer). After that, OpenStrap tells you when a new version is out, shows what changed, and installs it from **You → Updates**. Updates keep your data.
 
 To pair, you need your strap's auth key:
 
@@ -60,7 +60,7 @@ Can't add an email? Get the key on a computer with the [Gadgetbridge guide](http
 
 ## Privacy
 
-No cloud for your health data, no analytics, no trackers. OpenStrap only goes online when you ask it to: to sign in with Zepp, to check for firmware, or to load map tiles for a GPS workout. [privacy.md](docs/privacy.md) lists every request and every permission, and why.
+No cloud for your health data, no analytics, no trackers. OpenStrap only goes online when you ask it to (to sign in with Zepp, to check for firmware, or to load map tiles for a GPS workout), and once a day to ask GitHub whether a new OpenStrap is out, which you can turn off. [privacy.md](docs/privacy.md) lists every request and every permission, and why.
 
 ## Good to know
 

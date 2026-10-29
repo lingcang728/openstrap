@@ -29,6 +29,7 @@ class AppContainer(val app: Application) {
     val workout = org.openstrap.app.device.WorkoutSession(
         app, database.healthDao(), settings, strap, callRinging = { phoneAlerts.callRinging }, onSaved = autoHealthConnect::workoutSaved,
     )
+    val updater = org.openstrap.app.update.AppUpdater(app, settings, recording = { workout.state.value is org.openstrap.app.device.WorkoutState.Recording })
 }
 
 class OpenStrapApp : Application(), androidx.work.Configuration.Provider {
@@ -52,5 +53,7 @@ class OpenStrapApp : Application(), androidx.work.Configuration.Provider {
         org.openstrap.app.device.WidgetUpdater.scheduleMidnight(this)
         // Android 15 and later: the widget picker's previews, from the real layouts (spec 6.4).
         org.openstrap.app.device.WidgetUpdater.publishPreviews(this)
+        // The daily check for a new OpenStrap, unless it was turned off on the Updates page.
+        container.updater.start()
     }
 }
