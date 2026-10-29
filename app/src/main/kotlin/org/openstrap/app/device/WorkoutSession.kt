@@ -392,17 +392,16 @@ class WorkoutSession(
         (w.pausedAt?.let { w.withPause(it, now()) } ?: w).also { if (it != w) strapState(org.openstrap.protocol.services.SportSession.State.RESUME, it, send = toStrap) }
     }
 
-    /* --------------------------- The strap's own session (experimental, 0x0019) --------------------------- */
+    /* ---------------------------------- The strap's own session (0x0019) ---------------------------------- */
 
     /*
-     * TODO (deferred): run phone-started workouts on the strap in full. Untried on hardware; still missing are
-     * 0x0019 `04` live SportInfo, `06` status query and `20` strap-initiated start, plus phone GPS fixes to the
-     * strap over 0x0031 (codemap 05 §5, 03 §3.20). First test whether the strap answers the version query and then
-     * syncs a subtype-6 summary with its own TE/load; if it does, merge that with the phone's recording by trackId.
+     * TODO (deferred): the rest of Zepp's session. Still missing are 0x0019 `04` live SportInfo (Zepp's high heart
+     * rate buzz), `06` status query and `20` strap-initiated start, plus phone GPS fixes to the strap over 0x0031
+     * (codemap 05 §5, 03 §3.20). The strap's own pause and stop (`11`) and ABANDON are followed but untried on hardware.
      */
 
-    /** Read at each start: whether a phone workout also runs a session on the strap. */
-    @Volatile private var strapSessions = false
+    /** Read at each start: whether a phone workout also runs a session on the strap ([SettingsStore.strapSessions]). */
+    @Volatile private var strapSessions = true
     private var keepAlive: Job? = null
 
     /**
@@ -771,7 +770,7 @@ class WorkoutSession(
         calmJob?.cancelAndJoin()
         calmJob = null
         coach = org.openstrap.app.data.Coach(org.openstrap.app.data.WorkoutTarget.parse(w.target), w.targetReachedAt)
-        strapSessions = runCatching { settings.strapSessions.first() }.getOrDefault(false)
+        strapSessions = runCatching { settings.strapSessions.first() }.getOrDefault(true)
         heightCm = runCatching { settings.profile.first().heightCm }.getOrNull()
         if (w.useGps) location.start()
         _state.value = WorkoutState.Recording(w, maxHr)

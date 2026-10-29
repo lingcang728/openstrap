@@ -202,10 +202,11 @@ class SettingsStore(private val context: Context) {
     private val strapSessionsKey = androidx.datastore.preferences.core.booleanPreferencesKey("strap_sessions")
 
     /**
-     * Experimental, off by default: a phone workout also starts a session on the strap (0x0019), so the strap keeps
-     * its own record. Not yet verified on hardware; a debug intent turns it on.
+     * On by default: a phone workout also runs a session on the strap (0x0019), so the strap keeps its own record of
+     * it, whose heart rate and effect the workout then takes (verified on the strap 2026-10-30, codemap 05 §5.11). A
+     * debug intent turns it off, to compare the live stream without one.
      */
-    val strapSessions: Flow<Boolean> = context.dataStore.data.map { it[strapSessionsKey] ?: false }
+    val strapSessions: Flow<Boolean> = context.dataStore.data.map { it[strapSessionsKey] ?: true }
 
     suspend fun setStrapSessions(enabled: Boolean) {
         context.dataStore.edit { it[strapSessionsKey] = enabled }

@@ -249,7 +249,7 @@ class MainActivity : ComponentActivity() {
             val bytes = hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
             ((application as OpenStrapApp).container.strap as? org.openstrap.app.device.StrapManager)?.probe(probeEndpoint, bytes)
         }
-        // Debug: `--ez strap_sessions true` makes phone workouts also run a session on the strap (0x0019, unverified).
+        // Debug: `--ez strap_sessions false` stops phone workouts running a session on the strap (0x0019), `true` brings it back.
         if (BuildConfig.DEBUG && intent.hasExtra("strap_sessions")) {
             val on = intent.getBooleanExtra("strap_sessions", false)
             intent.removeExtra("strap_sessions")

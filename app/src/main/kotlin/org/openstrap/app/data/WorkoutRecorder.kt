@@ -148,8 +148,8 @@ object WorkoutRecorder {
     /**
      * [w] with the figures of [s], the strap's own record of nearly all of it ([Workouts.strapCovers]), and [effect], its
      * sport effect: its EPOC as Load, both training effects, its recovery time, and its average and peak heart rate,
-     * which the strap measures in its own workout mode and the live stream can read low in hard, jerky efforts. Its
-     * VO2max stays the phone's. Null without an EPOC, so the model's figures stand.
+     * over every second it measured, where the live stream can miss stretches (on the strap, 255 seconds against 205
+     * live, the shared ones within 2 bpm). Its VO2max stays the phone's. Null without an EPOC, so the model's figures stand.
      */
     fun withStrapRecord(w: AppWorkout, s: Workout, effect: org.openstrap.app.data.db.SportEffectRow?): AppWorkout? {
         val epoc = effect?.epoc ?: s.trainingLoad?.toFloat() ?: return null
