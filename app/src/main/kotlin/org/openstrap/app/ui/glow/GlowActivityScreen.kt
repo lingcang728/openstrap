@@ -88,6 +88,9 @@ private const val LISTED_WORKOUTS = 5
 /** Each day's Heart points (the strap's PAI) between two dates, keyed by date. */
 typealias PaiHistory = (LocalDate, LocalDate) -> Flow<Map<LocalDate, DailyPai>>
 
+/** Each day's stored energy ([org.openstrap.app.data.DailyEnergyHistory]) between two dates, keyed by date. */
+typealias EnergyHistory = (LocalDate, LocalDate) -> Flow<Map<LocalDate, org.openstrap.app.data.db.DailyEnergyRow>>
+
 /*
  * The Activity tab (spec 5.3): "how much did I move and train". A card to start a sport today, steps glowing, Load
  * against your usual, this week's facts and the workouts ([activityCards]). Every card and row opens its detail; the

@@ -66,6 +66,7 @@ fun GlowScoreDetailScreen(
     workouts: List<org.openstrap.app.data.WorkoutAnalysis> = emptyList(),
     paiHistory: PaiHistory? = null,
     onEditProfile: () -> Unit = {},
+    energyHistory: EnergyHistory? = null,
 ) {
     val r = recovery?.takeIf { it.date == state.date }
     when (score) {
@@ -75,7 +76,7 @@ fun GlowScoreDetailScreen(
         Score.Regularity -> RegularityDetail(state, r, history, onOpen, onSwitch, onSelectDay, contentPadding, onBack)
         Score.Naps -> NapsDetail(state, r, onOpen, onSwitch, onSelectDay, contentPadding, onBack)
         Score.HeartPoints, Score.ActiveMinutes, Score.Load, Score.Vo2Max, Score.Recover, Score.Energy, Score.Distance -> ActivityScoreDetail(
-            score, ActivityDetailContext(state, r, workouts, paiHistory, history, onOpen, onSwitch, onSelectDay, onEditProfile, contentPadding, onBack),
+            score, ActivityDetailContext(state, r, workouts, paiHistory, history, onOpen, onSwitch, onSelectDay, onEditProfile, contentPadding, onBack, energyHistory),
         )
     }
 }

@@ -94,17 +94,27 @@ class WorkoutDetailCopyTest {
     }
 
     @Test fun `facts leave out what there's nothing to say about`() {
-        val all = WorkoutDetailCopy.facts(5210f, false, 4 * 60L + 12, 6201, 412, Locale.UK)
+        val all = WorkoutDetailCopy.facts(5210f, false, 4 * 60L + 12, 6201, 412, locale = Locale.UK)
         assertEquals(listOf("Distance", "Paused", "Steps", "Calories"), all.map { it.name })
         assertEquals("5.21", all[0].value)
         assertEquals("Kilometres", all[0].status)
         assertEquals("4:12", all[1].value)
         assertEquals("6,201", all[2].value)
-        val short = WorkoutDetailCopy.facts(430f, true, 30, null, 0, Locale.UK)
+        val short = WorkoutDetailCopy.facts(430f, true, 30, null, 0, locale = Locale.UK)
         assertEquals(listOf("Distance"), short.map { it.name })
         assertEquals("430", short[0].value)
         assertEquals("Metres, estimated from your steps", short[0].status)
         assertTrue(WorkoutDetailCopy.facts(null, false, 0, null, null).isEmpty())
+    }
+
+    @Test fun `calories lead with active kcal and say the total under it`() {
+        val both = WorkoutDetailCopy.facts(null, false, 0, null, 1612, activeKcal = 1060, locale = Locale.UK).single()
+        assertEquals("1,060", both.value)
+        assertEquals("Total 1,612", both.status)
+        // A strap workout without a profile: the strap's own figure, in kcal.
+        val strap = WorkoutDetailCopy.facts(null, false, 0, null, 412, activeKcal = null, locale = Locale.UK).single()
+        assertEquals("412", strap.value)
+        assertEquals("kcal", strap.status)
     }
 
     @Test fun `the drop shows only after a real effort, against your usual`() {

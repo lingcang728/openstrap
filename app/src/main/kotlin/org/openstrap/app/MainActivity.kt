@@ -465,6 +465,7 @@ private fun AppRoot(
     // Your usual steps by the hour, read once per day shown, off the main thread ([DayViewModel.usualSteps]).
     val usualSteps by dayVm.usualSteps.collectAsStateWithLifecycle()
     val paiHistory: org.openstrap.app.ui.glow.PaiHistory = remember(container) { { from, to -> container.health.dailyPai(from, to) } }
+    val energyHistory: org.openstrap.app.ui.glow.EnergyHistory = remember(container) { { from, to -> container.health.dailyEnergy(from, to) } }
     val strapReadiness by remember(day.dayStart) { container.database.healthDao().strapReadiness(day.dayStart) }.collectAsStateWithLifecycle(null)
     val checkIn by remember(day.date) { container.health.checkIn(day.date) }.collectAsStateWithLifecycle(null)
     val daysWithData by dayVm.daysWithData.collectAsStateWithLifecycle()
@@ -899,7 +900,7 @@ private fun AppRoot(
                         detail.score, day, recovery, strapReadiness?.takeIf { it.day == day.dayStart }?.score, history,
                         onOpen = push, onSwitch = { setStack(t, stack.dropLast(1) + it) }, onSelectDay = dayVm::select,
                         contentPadding = padding, onBack = pop,
-                        workouts = workouts, paiHistory = paiHistory, onEditProfile = { openPage(Page.Profile) },
+                        workouts = workouts, paiHistory = paiHistory, onEditProfile = { openPage(Page.Profile) }, energyHistory = energyHistory,
                     )
                     Detail.Week -> org.openstrap.app.ui.glow.WeekDetail(
                         org.openstrap.app.ui.glow.ActivityDetailContext(
@@ -911,6 +912,10 @@ private fun AppRoot(
                         openWorkout?.takeIf { it.workout.start == detail.start }, workouts, padding, onBack = pop,
                         onDelete = { container.workout.discard(detail.start); pop() },
                         workoutsVm = workoutsVm, session = container.workout,
+                        bmrPerMinute = org.openstrap.app.data.EnergyExpenditure.bmrPerMinute(profile, profile.age()),
+                        recovery = recovery, energyHistory = energyHistory,
+                        // Its day's Calories: the day shown moves to it, as a strip pick does.
+                        onOpenDay = { d -> dayVm.select(d); push(Detail.OfScore(org.openstrap.app.ui.dashboard.Score.Energy)) },
                     )
                     Detail.AllWorkouts -> org.openstrap.app.ui.glow.GlowWorkoutsScreen(
                         workouts, padding, onOpen = { push(Detail.Workout(it)) }, onBack = pop,
@@ -1456,6 +1461,10 @@ private fun WorkoutDetail(
     onDelete: () -> Unit,
     workoutsVm: org.openstrap.app.ui.workout.WorkoutsViewModel,
     session: org.openstrap.app.device.WorkoutSession,
+    bmrPerMinute: Float?,
+    recovery: org.openstrap.app.data.RecoveryResult?,
+    energyHistory: org.openstrap.app.ui.glow.EnergyHistory,
+    onOpenDay: (java.time.LocalDate) -> Unit,
 ) {
     // OpenStrap's own recordings also get their summary (route, laps, sets, the recording for trim) and are deleted
     // through the session; the strap's are deleted and remembered, so the next sync doesn't bring them back.
@@ -1465,9 +1474,16 @@ private fun WorkoutDetail(
         if (start != null && fromPhone) workoutsVm.phoneSummary(start) else kotlinx.coroutines.flow.flowOf(null)
     }.collectAsStateWithLifecycle(null)
     val usualDrop by produceState<Int?>(null, start, fromPhone) { value = start?.takeIf { !fromPhone }?.let { workoutsVm.usualDrop(it) } }
+    // The workout's day: its active kcal as just worked out when it's the day shown, else as stored.
+    val date = a?.let { java.time.Instant.ofEpochSecond(it.shownStart).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }
+    val stored by remember(date, energyHistory) {
+        date?.let { d -> energyHistory(d, d) } ?: kotlinx.coroutines.flow.flowOf(emptyMap())
+    }.collectAsStateWithLifecycle(emptyMap())
+    val dayActive = recovery?.takeIf { it.date == date }?.energy?.activeKcal ?: date?.let { stored[it]?.activeKcal }
     org.openstrap.app.ui.glow.GlowWorkoutDetailScreen(
         a, summary, workouts, usualDrop, contentPadding, onBack,
         onDelete = if (fromPhone) onDelete else ({ start?.let(workoutsVm::deleteStrapWorkout); onBack() }),
         onTrim = { from, to -> start?.let { session.trim(it, from, to) } }, onUndoTrim = { start?.let(session::undoTrim) },
+        bmrPerMinute = bmrPerMinute, dayActiveKcal = dayActive, onOpenDay = date?.let { d -> { onOpenDay(d) } },
     )
 }

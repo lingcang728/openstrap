@@ -97,9 +97,13 @@ object WorkoutDetailCopy {
 
     /**
      * The workout's small facts, each left out when there's nothing to say: distance (from GPS, or estimated from
-     * steps), time paused past [MIN_PAUSED_S], steps and energy.
+     * steps), time paused past [MIN_PAUSED_S], steps and calories. Calories lead with [activeKcal] and say the total
+     * [calories] under it (calories spec 4.2); without an active figure of its own the total stands alone, in kcal.
      */
-    fun facts(meters: Float?, fromSteps: Boolean, pausedSeconds: Long, steps: Int?, calories: Int?, locale: Locale = Locale.getDefault()): List<WorkoutFact> =
+    fun facts(
+        meters: Float?, fromSteps: Boolean, pausedSeconds: Long, steps: Int?, calories: Int?, activeKcal: Int? = null,
+        locale: Locale = Locale.getDefault(),
+    ): List<WorkoutFact> =
         listOfNotNull(
             meters?.takeIf { it >= 10f }?.let { m ->
                 val unit = if (m >= 1000) "Kilometres" else "Metres"
@@ -107,7 +111,10 @@ object WorkoutDetailCopy {
             },
             pausedSeconds.takeIf { it >= MIN_PAUSED_S }?.let { WorkoutFact("Paused", workoutClock(it), "Not counted in the time") },
             steps?.takeIf { it > 0 }?.let { WorkoutFact("Steps", "%,d".format(locale, it), null) },
-            calories?.takeIf { it > 0 }?.let { WorkoutFact("Calories", it.toString(), "kcal") },
+            calories?.takeIf { it > 0 }?.let { total ->
+                if (activeKcal != null && activeKcal != total) WorkoutFact("Calories", "%,d".format(locale, activeKcal), "Total %,d".format(locale, total))
+                else WorkoutFact("Calories", "%,d".format(locale, total), "kcal")
+            },
         )
 
     /**

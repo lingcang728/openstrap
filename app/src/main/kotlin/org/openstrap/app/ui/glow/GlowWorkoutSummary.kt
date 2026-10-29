@@ -228,7 +228,7 @@ private fun DropLine(readings: List<Pair<Long, Int>>, end: Long, modifier: Modif
     }
 }
 
-/** The workout: active time, distance and the average, and the map when the route was kept. Lit from the left, about earlier. */
+/** The workout: active time, distance and the average, its calories, and the map when the route was kept. Lit from the left, about earlier. */
 @Composable
 private fun WorkoutCard(summary: PhoneSummary) {
     val a = summary.analysis
@@ -240,6 +240,10 @@ private fun WorkoutCard(summary: PhoneSummary) {
             workoutClock(active), null,
             SummaryCopy.workoutLine(summary.distanceMeters, summary.distanceFromSteps, w.averageHeartRate, (a.durationSeconds - active).coerceAtLeast(0)),
         )
+        // Its calories, active first, under the line (calories spec 4.2).
+        SummaryCopy.kcalLine(a.activeKcal?.let(Math::round), w.calories)?.let {
+            Text(it, color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary, modifier = Modifier.padding(top = 4.dp))
+        }
         RouteMap(summary, Modifier.padding(top = 14.dp))
     }
 }

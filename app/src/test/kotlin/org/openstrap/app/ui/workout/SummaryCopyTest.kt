@@ -146,4 +146,11 @@ class SummaryCopyTest {
         assertEquals("Last 176 m", SummaryCopy.splitRows(splits, emptyList(), 0L, totalMeters = 2176f).last().name)
         assertEquals("Last 185 m", SummaryCopy.splitRows(splits, emptyList(), 0L).last().name)
     }
+
+    @Test fun `the workout card says its calories, active first`() {
+        assertEquals("486 active kcal, total 1,612", SummaryCopy.kcalLine(486, 1612, Locale.UK))
+        assertEquals("612 kcal", SummaryCopy.kcalLine(null, 612, Locale.UK))
+        assertNull(SummaryCopy.kcalLine(null, null))
+        assertNull(SummaryCopy.kcalLine(0, 0))
+    }
 }

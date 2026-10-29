@@ -122,6 +122,13 @@ object SummaryCopy {
         return listOfNotNull(parts.takeIf { it.isNotEmpty() }?.let { "$it." }, paused).joinToString(" ").ifEmpty { null }
     }
 
+    /** The workout card's calories, active first (calories spec 4.2): "486 active kcal, total 612"; null without them. */
+    fun kcalLine(active: Int?, total: Int?, locale: java.util.Locale = java.util.Locale.getDefault()): String? = when {
+        total == null || total <= 0 -> null
+        active == null || active == total -> "%,d kcal".format(locale, total)
+        else -> "%,d active kcal, total %,d".format(locale, active, total)
+    }
+
     /** A lap's line on the list: "1.02 km, average 150 bpm"; null with neither. */
     fun lapLine(meters: Double?, averageBpm: Int?): String? = listOfNotNull(
         meters?.let { km(it.toFloat()) + if (it >= 1000) " km" else "" },

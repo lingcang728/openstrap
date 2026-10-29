@@ -1,6 +1,7 @@
 package org.openstrap.app.ui.glow
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Column
@@ -8,6 +9,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -22,6 +25,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -35,6 +39,7 @@ import org.openstrap.app.data.WorkoutAnalysis
 import org.openstrap.app.ui.components.rememberScrubHaptics
 import org.openstrap.app.ui.components.scrub
 import org.openstrap.app.ui.dashboard.ActivityCopy
+import org.openstrap.app.ui.dashboard.CaloriesCopy
 import org.openstrap.app.ui.dashboard.DailyHistory
 import org.openstrap.app.ui.dashboard.DayUiState
 import org.openstrap.app.ui.dashboard.Detail
@@ -46,6 +51,7 @@ import org.openstrap.app.ui.dashboard.Score
 import org.openstrap.app.ui.dashboard.TabCopy
 import org.openstrap.app.ui.dashboard.TodayCopy
 import org.openstrap.app.ui.dashboard.WeekStory
+import org.openstrap.app.ui.theme.AppIcons
 import org.openstrap.app.ui.theme.MetricColors
 import java.time.Instant
 import java.time.LocalDate
@@ -56,7 +62,7 @@ import java.util.Locale
 
 /*
  * The Activity tab's details (spec 5.3 and 6.1) in the metric template: Heart points, active minutes, Load, VO2 max,
- * time to recover, energy and distance, and the week story opened from Your week on Today. None has a per-day series
+ * time to recover, Calories and distance, and the week story opened from Your week on Today. None has a per-day series
  * like a metric's, so each range stops where the app's history of it does: Heart points as far as the strap's daily
  * records go, active minutes the 14 days the day works out, Load the 30 days before it, the rest only the day shown.
  * The method behind every number is in its info sheet ([InfoCopy]).
@@ -75,6 +81,8 @@ internal class ActivityDetailContext(
     val onEditProfile: () -> Unit,
     val contentPadding: PaddingValues,
     val onBack: () -> Unit,
+    /** Each day's stored energy, for Calories' week, month and year. */
+    val energyHistory: EnergyHistory? = null,
 ) {
     val today: LocalDate get() = LocalDate.now()
     val isToday: Boolean get() = state.date == today
@@ -89,7 +97,7 @@ internal fun ActivityScoreDetail(score: Score, ctx: ActivityDetailContext) {
         Score.Load -> LoadDetail(ctx)
         Score.Vo2Max -> Vo2Detail(ctx)
         Score.Recover -> RecoverDetail(ctx)
-        Score.Energy -> EnergyDetail(ctx)
+        Score.Energy -> CaloriesDetail(ctx)
         Score.Distance -> DistanceDetail(ctx)
         else -> Unit
     }
@@ -495,48 +503,276 @@ private fun RecoverDetail(ctx: ActivityDetailContext) {
     if (info) InfoSheet(InfoCopy.of(Score.Recover), color, null, null, onDismiss = { info = false })
 }
 
-/* ----------------------------------------------- Energy --------------------------------------------- */
+/* ---------------------------------------------- Calories -------------------------------------------- */
 
-/** Energy: the day's estimate, your body's use at rest, how active the day was and how much of it was worn. */
+/**
+ * Calories (calories spec 4.5): active kcal as the headline with the goal under it. Day has the hours split by where the
+ * kcal came from, the total and your use at rest, and a row per workout, walking and everyday moving. Week, Month and
+ * Year read each day's stored row ([EnergyHistory]): the active kcal a day, the goal days, day bars split into
+ * workouts and the rest against the goal (weekly over a year), and the change against the range before. The day
+ * under way is drawn but left out of a range's numbers. No profile: as before, the way to add one.
+ */
 @Composable
-private fun EnergyDetail(ctx: ActivityDetailContext) {
-    val color = MetricColors.steps
+private fun CaloriesDetail(ctx: ActivityDetailContext) {
+    val color = MetricColors.calories
+    val date = ctx.state.date
+    val goal = org.openstrap.app.ui.dashboard.LocalGoals.current.calories
+    val ranges = Range.entries
+    var rangeIndex by rememberSaveable { mutableIntStateOf(0) }
+    val range = ranges[rangeIndex.coerceIn(ranges.indices)]
+    var scrub by remember(range, date) { mutableStateOf<DetailHeadline?>(null) }
     var info by rememberSaveable { mutableStateOf(false) }
     val e = ctx.r?.energy
-    val total = e?.totalKcal?.let(Math::round)
-    // TODO(step 6): Week and longer need each day's energy, which the engine works out only for the day shown.
-    val headline = when {
-        e != null && total != null -> DetailHeadline("%,d".format(total), if (ctx.isToday) "kcal so far today" else "kcal", null)
+    val active = e?.activeKcal?.let(Math::round)
+    val start = date.minusDays(range.days - 1L)
+    // A range reads twice its length, for the change against the one before.
+    val stored by remember(range, date, ctx.energyHistory) {
+        if (range == Range.Day) flowOf(null) else ctx.energyHistory?.invoke(start.minusDays(range.days.toLong()), date) ?: flowOf(emptyMap())
+    }.collectAsState(null)
+    // The day shown is worked out afresh, so it stands in for its row.
+    val rows = stored?.let { m ->
+        m.mapValues { (d, r) -> CaloriesCopy.DayKcal(d, r.activeKcal, r.totalKcal, r.workoutKcal, r.partial) } +
+            (e?.let { mapOf(date to CaloriesCopy.DayKcal(date, it.activeKcal, it.totalKcal, it.workoutKcal, it.partial)) } ?: emptyMap())
+    }
+    val summary = rows?.let { CaloriesCopy.summary(it, start, date, goal, inProgress = date.takeIf { ctx.isToday }) }
+    val headline = scrub ?: when {
         ctx.r == null -> DetailHeadline.none("No reading", DetailCopy.noValue(Metric.Steps, Range.Day, ctx.isToday))
-        else -> DetailHeadline.none("No estimate", "Needs your age, weight and height")
+        e == null || active == null -> DetailHeadline.none("No estimate", "Needs your age, weight and height")
+        range == Range.Day -> DetailHeadline("%,d".format(active), CaloriesCopy.dayLabel(ctx.isToday), "Goal met".takeIf { active >= goal })
+        summary == null -> DetailHeadline.none("Loading", DetailCopy.noValue(Metric.Steps, range, ctx.isToday))
+        summary.activeADay != null -> DetailHeadline("%,d".format(summary.activeADay), CaloriesCopy.rangeLabel(range), CaloriesCopy.goalDays(summary))
+        else -> DetailHeadline.none("No full days yet", DetailCopy.noValue(Metric.Steps, range, ctx.isToday))
     }
     DetailTemplate(
         Score.Energy.title, color, siblings(Detail.OfScore(Score.Energy), ctx.onSwitch), onInfo = { info = true }, onBack = ctx.onBack,
         contentPadding = ctx.contentPadding, headline = headline, strip = stepsStrip(ctx, DailyMetric.HeartRate), onDay = ctx.onSelectDay,
-        ranges = listOf(Range.Day), range = Range.Day, onRange = {},
+        ranges = ranges, range = range, onRange = { rangeIndex = ranges.indexOf(it) },
     ) {
-        if (e != null && total != null) {
+        if (e == null || active == null) {
+            if (ctx.r != null) item {
+                ListPanel(Modifier.padding(top = 8.dp)) { LinkRow("Add age, weight and height", ctx.onEditProfile, divider = false) }
+            }
+        } else if (range == Range.Day) {
+            item { GoalBar(CaloriesCopy.share(active, goal), CaloriesCopy.toGoal(active, goal), color) }
+            item { HourlyKcal(e, color) { h -> scrub = h?.let { DetailHeadline("%,d".format(Math.round(e.hourly.total[it])), CaloriesCopy.hourLabel(it), null) } } }
             item {
-                Column(Modifier.padding(top = 8.dp)) {
-                    // Your use at rest is the sentence's, so the figures are how active the day was and how much was worn.
-                    // Part of a day worn is the caveat's to say, with its hours.
-                    val figures = listOf(
-                        e.pal?.let { "%.2f".format(it) } to "Activity level",
-                        clockDuration(e.minutesWithData * 60L).takeIf { !e.partial } to "Hours worn",
-                    ).filter { it.first != null }
-                    if (figures.isNotEmpty()) DetailFigures(figures)
+                Column {
+                    // So far today both are; the activity level only means something for a whole day, in the goal's place.
+                    DetailFigures(
+                        listOf(
+                            "%,d".format(Math.round(e.totalKcal)) to "Total kcal",
+                            "%,d".format(Math.round(e.totalKcal - e.activeKcal)) to "At rest",
+                            (e.pal?.takeIf { !ctx.isToday }?.let { "%.2f".format(it) to "Activity level" } ?: ("%,d".format(goal) to "Goal")),
+                        ),
+                    )
                     DetailSentence(ActivityCopy.energy(Math.round(e.bmrKcal)))
                     InfoCopy.energyNotes(e).firstOrNull()?.let { note ->
                         androidx.compose.foundation.layout.Box(Modifier.clickable { info = true }) { CaveatLine(note, color) }
                     }
                 }
             }
-        } else if (ctx.r != null) item {
-            ListPanel(Modifier.padding(top = 8.dp)) { LinkRow("Add age, weight and height", ctx.onEditProfile, divider = false) }
+            item {
+                val zone = ZoneId.systemDefault()
+                val sources = remember(ctx.workouts, date, e) { CaloriesCopy.sources(ctx.workouts, date, e, e.bmrKcal / 1440f, zone) }
+                ListPanel(Modifier.padding(top = 8.dp), title = "Where it came from") {
+                    sources.forEachIndexed { i, s ->
+                        val start = s.workoutStart
+                        if (start != null) ListRow(
+                            s.name, color, "%,d".format(s.kcal), s.line, divider = i > 0, onClick = { ctx.onOpen(Detail.Workout(start)) },
+                            icon = org.openstrap.app.ui.workout.SportIcons.of(s.sportType ?: 0), iconTint = SportIconTint,
+                        ) else ListRow(
+                            s.name, color, "%,d".format(s.kcal), s.line, divider = i > 0,
+                            icon = if (s.name == "Walking") Metric.Steps.rowIcon() else AppIcons.PersonArmsSpread,
+                        )
+                    }
+                }
+            }
+        } else {
+            item {
+                when {
+                    rows == null -> DetailEmpty("Loading")
+                    summary == null || rows.keys.none { it in start..date } -> DetailEmpty("No calories in this range yet.")
+                    else -> RangeKcal(rows, range, start, date, goal, color) { scrub = it }
+                }
+            }
+            if (summary != null && summary.days > 0) {
+                item {
+                    DetailFigures(
+                        listOfNotNull(
+                            "%,d".format(summary.activeTotal) to "Active kcal in all",
+                            summary.totalADay?.let { "%,d".format(it) to "Total a day" },
+                            summary.vsBefore?.let { CaloriesCopy.signed(it) to CaloriesCopy.vsLabel(range) },
+                        ),
+                        Modifier.padding(top = 18.dp),
+                    )
+                }
+                CaloriesCopy.rangeSentence(summary)?.let { item { DetailSentence(it) } }
+            }
         }
-        item { ActivityRelated(Score.Energy, ctx, null) }
+        // On Day the list of sources sits right above, so Related takes the neutral edge (spec 2.5).
+        item {
+            androidx.compose.runtime.CompositionLocalProvider(
+                LocalEdgeOverride provides if (range == Range.Day && e != null) EdgeOverride(edge = Edge.Bottom) else EdgeOverride(),
+            ) { ActivityRelated(Score.Energy, ctx, null) }
+        }
     }
     if (info) InfoSheet(InfoCopy.of(Score.Energy), color, null, null, onDismiss = { info = false }, notes = InfoCopy.energyNotes(e))
+}
+
+/** The day toward the goal: a 4 dp bar in [color] filled to [share], [text] under it ("102 to your goal of 450"). */
+@Composable
+private fun GoalBar(share: Float, text: String, color: Color) {
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp)
+    Column(Modifier.padding(top = 8.dp)) {
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().height(4.dp).background(Color.White.copy(alpha = 0.08f), shape)) {
+            androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth(share.coerceIn(0f, 1f)).height(4.dp).background(color, shape))
+        }
+        Text(text, color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary, modifier = Modifier.padding(top = 8.dp))
+    }
+}
+
+/** The hours' colours: workouts in the ink, walking in its darker shade, everyday moving in white at 40%. */
+private val WalkingKcal = MetricColors.caloriesShade
+private val EverydayKcal = Color.White.copy(alpha = 0.4f)
+
+/**
+ * By the hour: the day's 24 hours as bars split by where the kcal came from (workouts at the foot, then walking, then
+ * everyday moving), the busiest hour as the title's note, the legend under the bars. Usual light from below (spec 2.5).
+ * Tapping or holding an hour puts its kcal in the headline ([onPick]).
+ */
+@Composable
+private fun HourlyKcal(e: org.openstrap.app.data.EnergyExpenditure.Day, color: Color, onPick: (Int?) -> Unit) {
+    val h = e.hourly
+    val stacks = remember(h) { List(24) { listOf(h.workout[it], h.walking[it], h.everyday[it].coerceAtLeast(0f)) } }
+    EdgeCard(color, Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        EdgeTitle("By the hour", CaloriesCopy.peak(h.total))
+        KcalBars(stacks, listOf(color, WalkingKcal, EverydayKcal), goal = null, labels = listOf("00", "06", "12", "18", "24"), spread = true, Modifier.padding(top = 16.dp), height = 120.dp, onPick = onPick)
+        KcalLegend(listOf("Workouts" to color, "Walking" to WalkingKcal, "Everyday" to EverydayKcal), Modifier.padding(top = 12.dp))
+    }
+}
+
+/**
+ * A week or a month of days, or a year of weeks (each a day's average), as bars split into workouts and the rest,
+ * with the goal as a solid line at 40% (spec 2.7). Tapping or holding a bar puts it in the headline ([onScrub]).
+ */
+@Composable
+private fun RangeKcal(
+    rows: Map<LocalDate, CaloriesCopy.DayKcal>, range: Range, start: LocalDate, end: LocalDate, goal: Int, color: Color,
+    onScrub: (DetailHeadline?) -> Unit,
+) {
+    val bars = remember(rows, range, start, end) {
+        val days = generateSequence(start) { it.plusDays(1) }.takeWhile { !it.isAfter(end) }.toList()
+        if (range != Range.Year) days.map { d -> d to rows[d]?.let { listOf(it.workout, (it.active - it.workout).coerceAtLeast(0f)) } }
+        else days.groupBy { it.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY)) }.map { (monday, week) ->
+            val have = week.mapNotNull { rows[it] }
+            monday to have.takeIf { it.isNotEmpty() }?.let { w ->
+                val workout = w.sumOf { it.workout.toDouble() }.toFloat() / w.size
+                listOf(workout, (w.sumOf { it.active.toDouble() }.toFloat() / w.size - workout).coerceAtLeast(0f))
+            }
+        }
+    }
+    val labels = when (range) {
+        Range.Week -> bars.map { shortDay(it.first) }
+        Range.Month -> listOf(0f, 1 / 3f, 2 / 3f, 1f).map { bars[((bars.size - 1) * it).toInt()].first.format(DateTimeFormatter.ofPattern("d MMM")) }
+        else -> listOf(0f, 1 / 3f, 2 / 3f, 1f).map { bars[((bars.size - 1) * it).toInt()].first.format(DateTimeFormatter.ofPattern("MMM")) }
+    }
+    Column(Modifier.padding(top = 8.dp)) {
+        KcalBars(
+            bars.map { it.second ?: emptyList() }, listOf(color, WalkingKcal), goal.toFloat(), labels, spread = range != Range.Week, height = 200.dp,
+            onPick = { i ->
+                onScrub(i?.let { bars[it] }?.let { (d, parts) ->
+                    parts?.let {
+                        val label = if (range == Range.Year) "active kcal a day, week of ${d.format(DateTimeFormatter.ofPattern("d MMM"))}" else "active kcal, ${d.format(DAY)}"
+                        DetailHeadline("%,d".format(Math.round(it.sum())), label, null)
+                    }
+                })
+            },
+        )
+        KcalLegend(listOf("Workouts" to color, "The rest" to WalkingKcal), Modifier.padding(top = 12.dp))
+    }
+}
+
+/**
+ * Bars stacked from the foot in [colors], one list of parts a bar; an empty bar isn't drawn, only the hairline
+ * baseline under them. [goal] draws a solid line at 40% white. Labels under it: one a bar, or [spread] across the
+ * width. Tapping or holding picks a bar ([onPick], null on release); the others dim.
+ */
+@Composable
+private fun KcalBars(
+    stacks: List<List<Float>>, colors: List<Color>, goal: Float?, labels: List<String>, spread: Boolean,
+    modifier: Modifier = Modifier, height: Dp = 200.dp, onPick: (Int?) -> Unit,
+) {
+    val sums = remember(stacks) { stacks.map { it.sum() } }
+    var picked by remember(stacks) { mutableStateOf<Int?>(null) }
+    var width by remember { mutableStateOf(0f) }
+    val tick = rememberScrubHaptics()
+    fun indexAt(x: Float) = if (width <= 0f || stacks.isEmpty()) null else (x / (width / stacks.size)).toInt().coerceIn(0, stacks.lastIndex)
+    Column(modifier) {
+        Canvas(
+            Modifier.fillMaxWidth().height(height).onSizeChanged { width = it.width.toFloat() }
+                .scrub(sums) { x -> val i = x?.let(::indexAt); picked = i; tick(i, sums, null, false); onPick(i) }
+                .pointerInput(stacks) {
+                    detectTapGestures { o ->
+                        val i = indexAt(o.x)
+                        picked = if (picked == i) null else i
+                        tick(picked, sums, null, false)
+                        onPick(picked)
+                    }
+                },
+        ) {
+            val top = 8.dp.toPx()
+            val hi = maxOf(goal ?: 0f, sums.maxOrNull() ?: 0f).coerceAtLeast(1f)
+            fun yOf(v: Float) = top + (size.height - top) * (1f - v / hi)
+            val slot = size.width / stacks.size.coerceAtLeast(1)
+            val w = (slot * 0.6f).coerceAtMost(14.dp.toPx())
+            val r = CornerRadius(minOf(4.dp.toPx(), w / 2))
+            drawLine(Color.White.copy(alpha = 0.08f), Offset(0f, size.height - 0.5.dp.toPx()), Offset(size.width, size.height - 0.5.dp.toPx()), 1.dp.toPx())
+            stacks.forEachIndexed { i, parts ->
+                val sum = sums[i]
+                if (sum <= 0f) return@forEachIndexed
+                val x = slot * i + (slot - w) / 2
+                val a = if (picked != null && picked != i) 0.35f else 1f
+                val bar = androidx.compose.ui.graphics.Path().apply {
+                    addRoundRect(androidx.compose.ui.geometry.RoundRect(x, yOf(sum), x + w, size.height, r))
+                }
+                clipPath(bar) {
+                    var below = 0f
+                    parts.forEachIndexed { k, v ->
+                        if (v <= 0f) return@forEachIndexed
+                        val c = colors[k.coerceAtMost(colors.lastIndex)]
+                        drawRect(c.copy(alpha = c.alpha * a), Offset(x, yOf(below + v)), Size(w, yOf(below) - yOf(below + v)))
+                        below += v
+                    }
+                }
+            }
+            goal?.let { g -> val y = yOf(g); drawLine(Color.White.copy(alpha = 0.4f), Offset(0f, y), Offset(size.width, y), 1.dp.toPx()) }
+        }
+        androidx.compose.foundation.layout.Row(
+            Modifier.fillMaxWidth().padding(top = 6.dp),
+            horizontalArrangement = if (spread) androidx.compose.foundation.layout.Arrangement.SpaceBetween else androidx.compose.foundation.layout.Arrangement.Start,
+        ) {
+            labels.forEach { l ->
+                Text(
+                    l, color = Color.White.copy(alpha = 0.55f), style = GlowType.secondary, maxLines = 1,
+                    modifier = if (spread) Modifier else Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+            }
+        }
+    }
+}
+
+/** What the bars' colours are: a small round swatch and its name, side by side. */
+@Composable
+private fun KcalLegend(items: List<Pair<String, Color>>, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.layout.Row(modifier, horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)) {
+        items.forEach { (name, c) ->
+            androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                androidx.compose.foundation.layout.Box(Modifier.size(8.dp).background(c, androidx.compose.foundation.shape.CircleShape))
+                androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
+                Text(name, color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary, maxLines = 1)
+            }
+        }
+    }
 }
 
 /* ---------------------------------------------- Distance -------------------------------------------- */
