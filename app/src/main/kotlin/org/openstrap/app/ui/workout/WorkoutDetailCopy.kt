@@ -22,8 +22,8 @@ import org.openstrap.app.ui.glow.workoutClock
 /** A small fact on the workout's list: [name], [value] in dot-matrix digits, and the [status] under the name. */
 data class WorkoutFact(val name: String, val value: String, val status: String?)
 
-/** What a workout's other figures look like, for the strap's own record of a phone workout. */
-data class EffectFigures(val aerobic: Float?, val anaerobic: Float?, val load: Int?, val recoveryMinutes: Int?)
+/** What a workout's other figures look like, for the strap's own record of a phone workout; [from] its start, "22:53". */
+data class EffectFigures(val aerobic: Float?, val anaerobic: Float?, val load: Int?, val recoveryMinutes: Int?, val from: String? = null)
 
 /** The (i) on the Load card: the sheet's words, the bar of the 0 to 5 scale this workout is in, and its folded rows. */
 data class EffectSheet(val info: Info, val here: Int?, val hereLine: String?, val rows: List<Pair<String, String>>)
@@ -163,14 +163,32 @@ object WorkoutDetailCopy {
     private fun one(x: Float) = String.format(Locale.ROOT, "%.1f", x)
 
     /**
+     * The strap's own records of a phone workout, in the sheet: one's figures, or each of several by its start, so a
+     * long workout that held two shows both. Empty when there are none, or none with figures.
+     */
+    private fun strapLine(strap: List<EffectFigures>): String {
+        fun figures(s: EffectFigures) = listOfNotNull(
+            s.aerobic?.let { "aerobic ${one(it)}" }, s.anaerobic?.let { "anaerobic ${one(it)}" }, s.load?.let { "Load $it" },
+            SummaryCopy.recoverSpan(s.recoveryMinutes)?.let { "time to recover $it" },
+        ).joinToString(", ")
+        val each = strap.map { it to figures(it) }.filter { it.second.isNotEmpty() }
+        return when {
+            each.isEmpty() -> ""
+            strap.size == 1 -> " The strap recorded this workout too. Its own figures: ${each.single().second}."
+            else -> " The strap recorded it as ${strap.size} workouts of its own. " +
+                each.joinToString(" ") { (s, f) -> "From ${s.from ?: "its start"}: $f." }
+        }
+    }
+
+    /**
      * The (i) on the Load card: Load (EPOC), training effect on its 0 to 5 scales, time to recover, the heart rate drop
      * and VO2 max, each explained plainly with this workout's value and left out when it has none. [fromPhone] says who
-     * worked them out; [strap] is the strap's own record of a phone workout, when it kept one.
+     * worked them out; [strap] are the strap's own records of a phone workout, by start, when it kept any.
      */
     fun effectSheet(
         aerobic: Float?, anaerobic: Float?, load: Int?, usualLoad: Float?, recoveryMinutes: Int?,
         drop60: Int?, drop120: Int?, endBpm: Int?, meaningfulDrop: Boolean, vo2max: Float?,
-        fromPhone: Boolean, strap: EffectFigures?,
+        fromPhone: Boolean, strap: List<EffectFigures>,
     ): EffectSheet {
         val rows = listOfNotNull(
             load?.let { l ->
@@ -202,13 +220,7 @@ object WorkoutDetailCopy {
             vo2max?.let { "VO2 max" to "The most oxygen your body can use, in ml per kg per minute, estimated from this workout: ${Math.round(it)}." },
             "Where these come from" to (
                 if (fromPhone) "Worked out by OpenStrap from your heart rate, on the strap's own scales." else "From the strap, worked out during the workout."
-                ) + (strap?.let { s ->
-                val figures = listOfNotNull(
-                    s.aerobic?.let { "aerobic ${one(it)}" }, s.anaerobic?.let { "anaerobic ${one(it)}" }, s.load?.let { "Load $it" },
-                    SummaryCopy.recoverSpan(s.recoveryMinutes)?.let { "time to recover $it" },
-                )
-                if (figures.isEmpty()) "" else " The strap recorded this workout too. Its own figures: ${figures.joinToString(", ")}."
-            } ?: ""),
+                ) + strapLine(strap),
         )
         val info = Info(
             name = "Load and training effect",

@@ -126,13 +126,21 @@ class WorkoutsTest {
         assertEquals(walk, Workouts.phoneTwin(detected, listOf(walk), start + 9000))
         val listed = Workouts.listed(listOf(detected), emptyList(), emptyList(), listOf(walk), emptyMap(), 190, now = start + 9000)
         assertEquals(listOf(true), listed.map { it.fromPhone })
-        // Noticed a few minutes before Start, mostly inside: the same. Before Start by more, mostly outside: its own.
+        // Noticed 5 min before Start: the same. 50 min before, mostly outside: its own.
         org.junit.Assert.assertTrue(Workouts.sameWorkout((start - 300)..(start + 1500), start..(start + 6892)))
         org.junit.Assert.assertFalse(Workouts.sameWorkout((start - 3000)..(start + 600), start..(start + 6892)))
         // Right after it ended: another workout.
         org.junit.Assert.assertFalse(Workouts.sameWorkout((start + 6950)..(start + 9000), start..(start + 6892)))
+        // A walk 18:00 to 18:30, then the gym 18:28 to 19:30: starting inside isn't enough, an hour lies outside.
+        org.junit.Assert.assertFalse(Workouts.sameWorkout((start + 1680)..(start + 5400), start..(start + 1800)))
+        // Ran on 8 min past Stop: still the same.
+        org.junit.Assert.assertTrue(Workouts.sameWorkout((start + 600)..(start + 2280), start..(start + 1800)))
         // While the walk still records, its range runs to now.
         org.junit.Assert.assertTrue(Workouts.sameWorkout((start + 4638)..(start + 6876), Workouts.phoneRange(walk.copy(end = null), start + 7000)))
+        // A workout left running for hours holds two of the strap's: both are its, by start.
+        val forgotten = start..(start + 20_000)
+        val second = detected.copy(start = start + 12_000, end = start + 13_800)
+        assertEquals(listOf(detected.start, second.start), Workouts.strapTwins(listOf(second, detected), forgotten).map { it.start })
         // With no phone workout over it, the strap's is listed as before.
         assertEquals(1, Workouts.listed(listOf(detected), emptyList(), emptyList(), emptyList(), emptyMap(), 190).size)
     }

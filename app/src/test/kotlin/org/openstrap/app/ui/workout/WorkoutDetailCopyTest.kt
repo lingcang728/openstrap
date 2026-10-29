@@ -130,7 +130,7 @@ class WorkoutDetailCopyTest {
     @Test fun `the sheet explains Load, training effect and the rest with this workout's values`() {
         val s = WorkoutDetailCopy.effectSheet(
             aerobic = 3.2f, anaerobic = 1.1f, load = 85, usualLoad = 70f, recoveryMinutes = 840,
-            drop60 = 30, drop120 = 48, endBpm = 160, meaningfulDrop = true, vo2max = 48.4f, fromPhone = false, strap = null,
+            drop60 = 30, drop120 = 48, endBpm = 160, meaningfulDrop = true, vo2max = 48.4f, fromPhone = false, strap = emptyList(),
         )
         assertEquals(2, s.here)
         assertEquals(listOf("Load", "Training effect", "Time to recover", "Heart rate drop", "VO2 max", "Where these come from"), s.rows.map { it.first })
@@ -145,7 +145,7 @@ class WorkoutDetailCopyTest {
         val s = WorkoutDetailCopy.effectSheet(
             aerobic = null, anaerobic = null, load = 60, usualLoad = null, recoveryMinutes = null,
             drop60 = null, drop120 = null, endBpm = null, meaningfulDrop = false, vo2max = null,
-            fromPhone = true, strap = EffectFigures(3.0f, 0.8f, 80, 720),
+            fromPhone = true, strap = listOf(EffectFigures(3.0f, 0.8f, 80, 720)),
         )
         assertNull(s.here)
         assertNull(s.hereLine)
@@ -154,13 +154,24 @@ class WorkoutDetailCopyTest {
         assertTrue(s.rows[1].second.contains("Its own figures: aerobic 3.0, anaerobic 0.8, Load 80, time to recover 12 h."))
     }
 
+    @Test fun `a long workout that held two strap records names both`() {
+        val s = WorkoutDetailCopy.effectSheet(
+            aerobic = null, anaerobic = null, load = 60, usualLoad = null, recoveryMinutes = null,
+            drop60 = null, drop120 = null, endBpm = null, meaningfulDrop = false, vo2max = null,
+            fromPhone = true, strap = listOf(EffectFigures(2.1f, null, 20, null, "18:05"), EffectFigures(1.0f, null, 16, null, "19:10")),
+        )
+        assertTrue(s.rows.last().second.endsWith(
+            " The strap recorded it as 2 workouts of its own. From 18:05: aerobic 2.1, Load 20. From 19:10: aerobic 1.0, Load 16.",
+        ))
+    }
+
     @Test fun `nothing on the page uses an interpunct, semicolon or em dash`() {
         val lines = listOf(
             WorkoutDetailCopy.sentence(run, hour, 150, 100f, listOf(0, 0, 0, 900, 0)),
             WorkoutDetailCopy.sentence(strength, 60L, null, null, emptyList()),
             WorkoutDetailCopy.dropLine(30, true, 20)!!,
         ) + WorkoutDetailCopy.facts(5210f, true, 600, 5000, 300).flatMap { listOfNotNull(it.name, it.value, it.status) } +
-            WorkoutDetailCopy.effectSheet(3.2f, 1.1f, 85, 70f, 840, 12, 20, 110, false, 48f, true, EffectFigures(3f, 1f, 80, 600))
+            WorkoutDetailCopy.effectSheet(3.2f, 1.1f, 85, 70f, 840, 12, 20, 110, false, 48f, true, listOf(EffectFigures(3f, 1f, 80, 600, "21:40"), EffectFigures(2f, null, 16, null, "22:53")))
                 .let { s -> listOfNotNull(s.info.name, s.info.meaning, s.hereLine) + s.info.scale + s.rows.flatMap { listOf(it.first, it.second) } }
         lines.forEach { l -> listOf("·", ";", "—").forEach { assertFalse("$l has $it", l.contains(it)) } }
     }

@@ -156,7 +156,7 @@ fun GlowWorkoutDetailScreen(
             }
         }
     }
-    if (info && shown != null) EffectInfo(shown, usual, phone?.strapWorkout, onDismiss = { info = false })
+    if (info && shown != null) EffectInfo(shown, usual, phone?.strapWorkouts.orEmpty(), onDismiss = { info = false })
 }
 
 /**
@@ -312,14 +312,17 @@ private fun FactsList(facts: List<WorkoutFact>, summary: PhoneSummary?) {
 
 /** The (i) on the Load card: Load, training effect, time to recover, the heart rate drop and VO2 max explained. */
 @Composable
-private fun EffectInfo(a: WorkoutAnalysis, usual: Float?, strap: WorkoutAnalysis?, onDismiss: () -> Unit) {
+private fun EffectInfo(a: WorkoutAnalysis, usual: Float?, strap: List<WorkoutAnalysis>, onDismiss: () -> Unit) {
     val w = a.workout
     val sheet = WorkoutDetailCopy.effectSheet(
         aerobic = w.aerobicTrainingEffect, anaerobic = w.anaerobicTrainingEffect, load = w.trainingLoad, usualLoad = usual,
         recoveryMinutes = a.recoveryMinutes, drop60 = a.recovery60, drop120 = a.recovery120, endBpm = a.endHeartRate,
         meaningfulDrop = a.recoveryIsMeaningful, vo2max = a.effect?.vo2max ?: w.vo2max?.toFloat(), fromPhone = a.fromPhone,
-        strap = strap?.let { s ->
-            EffectFigures(s.workout.aerobicTrainingEffect, s.workout.anaerobicTrainingEffect, s.workout.trainingLoad, s.recoveryMinutes)
+        strap = strap.map { s ->
+            EffectFigures(
+                s.workout.aerobicTrainingEffect, s.workout.anaerobicTrainingEffect, s.workout.trainingLoad, s.recoveryMinutes,
+                from = Instant.ofEpochSecond(s.workout.start).atZone(ZoneId.systemDefault()).toLocalTime().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),
+            )
         },
     )
     InfoSheet(sheet.info, MetricColors.load, sheet.here, sheet.hereLine, onDismiss, rows = sheet.rows)

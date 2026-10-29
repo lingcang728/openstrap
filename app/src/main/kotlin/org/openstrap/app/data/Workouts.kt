@@ -108,27 +108,34 @@ object Workouts {
         )
     }
 
-    /** How far before a phone workout's start the strap's record of it may begin. */
-    const val SAME_WORKOUT_SLACK_S = 120L
+    /** The most of a strap record that may lie outside a phone workout for the two to be one: 10 min, or a quarter. */
+    const val SAME_WORKOUT_OUTSIDE_S = 600L
+    const val SAME_WORKOUT_OUTSIDE_SHARE = 0.25f
 
     /** A phone workout's time as [sameWorkout] reads it: its shown start to its end, [now] while it records. */
     fun phoneRange(p: org.openstrap.app.data.db.AppWorkout, now: Long): LongRange = p.from..(p.end ?: now)
 
     /**
      * Whether the strap workout over [strap] is the strap's own record of the phone workout over [phone], so the two
-     * are one workout: the strap auto-detects a walk minutes into it, and mirrors one started on the phone. It starts
-     * inside the phone's range (or up to [SAME_WORKOUT_SLACK_S] before it), or at least half of it lies inside, so
-     * one the strap noticed before you tapped Start merges too.
+     * are one workout: the strap auto-detects a walk minutes into it, and mirrors one started on the phone. They
+     * overlap, and little of the strap's lies outside: at most [SAME_WORKOUT_OUTSIDE_S], or [SAME_WORKOUT_OUTSIDE_SHARE]
+     * of it when longer. So a walk the strap noticed a few minutes before you tapped Start merges, and a gym session
+     * that began as your walk ended stays its own, both ways round.
      */
     fun sameWorkout(strap: LongRange, phone: LongRange): Boolean {
-        if (strap.first in (phone.first - SAME_WORKOUT_SLACK_S)..phone.last) return true
         val overlap = minOf(strap.last, phone.last) - maxOf(strap.first, phone.first)
-        return overlap > 0 && overlap * 2 >= strap.last - strap.first
+        if (overlap <= 0) return false
+        val length = strap.last - strap.first
+        return length - overlap <= maxOf(SAME_WORKOUT_OUTSIDE_S, (length * SAME_WORKOUT_OUTSIDE_SHARE).toLong())
     }
 
     /** The phone workout of [phone] that [w] is the strap's record of ([sameWorkout]), if any. */
     fun phoneTwin(w: Workout, phone: List<org.openstrap.app.data.db.AppWorkout>, now: Long): org.openstrap.app.data.db.AppWorkout? =
         phone.firstOrNull { sameWorkout(w.start..w.end, phoneRange(it, now)) }
+
+    /** Every strap record of [strap] that is the strap's own of the phone workout over [phone] ([sameWorkout]), by start. */
+    fun strapTwins(strap: List<Workout>, phone: LongRange): List<Workout> =
+        strap.filter { sameWorkout(it.start..it.end, phone) }.sortedBy { it.start }
 
     /**
      * The strap's workouts [ws] and the phone's [phone] as the workout lists show them, newest first: a strap workout's
