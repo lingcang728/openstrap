@@ -65,6 +65,16 @@ class ReleasesTest {
         assertNull(Releases.current(releases, "2.1.4"))
     }
 
+    @Test fun `a newer release waits until the Updates page has shown it`() {
+        val releases = Releases.parse("[${release("v2.2.0")}, ${release("v2.1.0")}]")
+        assert(Releases.waiting(releases, "2.1.0", seen = null))
+        assert(!Releases.waiting(releases, "2.1.0", seen = "v2.2.0"))
+        // A release out since the page was last opened brings the dot back.
+        assert(Releases.waiting(releases, "2.0.0", seen = "v2.1.0"))
+        assert(!Releases.waiting(releases, "2.2.0", seen = null))
+        assert(!Releases.waiting(emptyList(), "2.1.0", seen = null))
+    }
+
     @Test fun `a SHA256SUMS line gives the APK's hash`() {
         val sums = "CFB8B129  OpenStrap-v2.1.0.apk\nffff  other.apk\n"
         assertEquals("cfb8b129", Releases.sumFor(sums, "OpenStrap-v2.1.0.apk"))

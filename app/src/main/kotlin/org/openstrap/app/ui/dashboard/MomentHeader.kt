@@ -68,6 +68,8 @@ fun MomentHeader(
     onOpenStrap: () -> Unit,
     /** Shows the All metrics button when set. */
     onOpenAllMetrics: (() -> Unit)?,
+    /** A new version waits: a dot on the avatar until the Updates page is opened. */
+    updateWaiting: Boolean = false,
 ) {
     var calendarOpen by rememberSaveable { mutableStateOf(false) }
     if (calendarOpen) DayCalendarSheet(date, picker.available, picker.onPick, onDismiss = { calendarOpen = false })
@@ -78,7 +80,11 @@ fun MomentHeader(
         CentredRow(
             overhang = if (hasNext) 0.dp else PeekWidth + 16.dp,
             // You and the Strap page grow out of the button tapped (spec 3.5).
-            start = { growClick(onOpenYou).let { g -> RoundButton(AppIcons.User, "You", "Open You", g.onClick, g.modifier) } },
+            start = {
+                growClick(onOpenYou).let { g ->
+                    RoundButton(AppIcons.User, if (updateWaiting) "You, a new version is ready" else "You", "Open You", g.onClick, g.modifier, dot = updateWaiting)
+                }
+            },
             centre = { DaySwitcher(title, date, hasNext, onPrev, onNext, { calendarOpen = true }, Modifier) },
             end = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -122,15 +128,20 @@ private fun CentredRow(
     }
 }
 
-/** A round button at either end of the header: the avatar, and All metrics in its likeness. */
+/** A round button at either end of the header: the avatar, and All metrics in its likeness. [dot] marks its top right. */
 @Composable
 private fun RoundButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, clickLabel: String, onClick: () -> Unit, modifier: Modifier = Modifier,
+    dot: Boolean = false,
 ) {
-    Box(
-        modifier.size(38.dp).clip(CircleShape).background(Avatar).clickable(onClickLabel = clickLabel, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) { Icon(icon, description, Modifier.size(20.dp), tint = Color.White) }
+    Box(modifier.size(38.dp)) {
+        Box(
+            Modifier.matchParentSize().clip(CircleShape).background(Avatar).clickable(onClickLabel = clickLabel, onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) { Icon(icon, description, Modifier.size(20.dp), tint = Color.White) }
+        // On the circle's edge at its top right, ringed in the page's black so it reads apart from the button.
+        if (dot) org.openstrap.app.ui.glow.NoticeDot(Modifier.align(Alignment.TopEnd), ring = Color.Black)
+    }
 }
 
 /** The title over the day, with its neighbours peeking in either side; it follows a sideways drag and springs back. */

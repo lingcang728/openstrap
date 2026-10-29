@@ -23,8 +23,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -82,6 +85,16 @@ class AppUpdater(private val app: Application, private val settings: SettingsSto
 
     /** The version running, "2.1.0". */
     val installed: String = BuildConfig.VERSION_NAME
+
+    /** A newer release the Updates page hasn't shown yet ([Releases.waiting]): the avatar and the Updates row carry a dot. */
+    val waiting: StateFlow<Boolean> = combine(_state, settings.updateSeen) { s, seen -> Releases.waiting(s.releases, installed, seen) }
+        .stateIn(scope, SharingStarted.Eagerly, false)
+
+    /** The Updates page is showing: the newest release counts as seen, and the dots go. */
+    fun markSeen() {
+        val newest = Releases.newer(_state.value.releases, installed).firstOrNull() ?: return
+        scope.launch { settings.setUpdateSeen(newest.tag) }
+    }
 
     init {
         // The list from the last check, so the Updates page and its notes show before (or without) a new one.

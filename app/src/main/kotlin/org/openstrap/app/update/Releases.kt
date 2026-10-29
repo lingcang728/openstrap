@@ -89,6 +89,13 @@ object Releases {
         return releases.filter { compare(it.version, mine) > 0 }
     }
 
+    /**
+     * A newer release is out that the Updates page hasn't shown yet ([seen] is the tag of the newest one it has):
+     * the avatar and the Updates row carry a dot until it's opened.
+     */
+    fun waiting(releases: List<Release>, installed: String, seen: String?): Boolean =
+        newer(releases, installed).firstOrNull()?.let { it.tag != seen } ?: false
+
     /** The release [installed] came from, when it's one of [releases]. */
     fun current(releases: List<Release>, installed: String): Release? {
         val mine = version(installed) ?: return null
