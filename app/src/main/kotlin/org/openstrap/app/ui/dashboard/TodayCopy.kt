@@ -216,7 +216,7 @@ object TodayCopy {
         val parts = listOfNotNull(
             when (workouts.size) {
                 0 -> null
-                1 -> tr(R.string.missed_a_workout, workouts[0] ?: tr(R.string.missed_unit_workout))
+                1 -> tr(R.string.missed_a_workout, workouts[0] ?: tr(R.string.frame_after_your__workout))
                 else -> tr(R.string.missed_n_workouts, workouts.size)
             },
             if (stepCount || stepGoal <= 0) "%,d steps".format(locale, steps) else stepsAgainstGoal(steps, stepGoal),
@@ -227,8 +227,8 @@ object TodayCopy {
                 LoadStatus.SoFar, null -> null
             },
         )
-        val list = if (parts.size == 1) parts[0] else tr(R.string.missed_list_and, parts.dropLast(1).joinToString(", "), parts.last())
-        return "$head ${list.replaceFirstChar { it.uppercase() }}."
+        val list = if (parts.size == 1) parts[0] else tr(R.string.missed_list_and, parts.dropLast(1).joinToString(trRaw(R.string.missed_list_separator)), parts.last())
+        return tr(R.string.missed_head_and_list, head, list.replaceFirstChar { it.uppercase() })
     }
 
     /** The day's [steps] against the [goal] in words: under half is well short, from 80% close, the goal itself past. */

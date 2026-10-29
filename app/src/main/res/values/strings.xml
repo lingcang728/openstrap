@@ -1764,4 +1764,6 @@
     <string name="missed_takes_off_about_year">"takes off about 1 year"</string>
     <string name="missed_adds_about_year">"adds about 1 year"</string>
     <string name="missed_dumping_type">"Dumping type %1$s"</string>
+    <string name="missed_list_separator">", "</string>
+    <string name="missed_head_and_list">"%1$s %2$s."</string>
 </resources>

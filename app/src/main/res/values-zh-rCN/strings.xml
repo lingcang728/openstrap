@@ -1706,7 +1706,7 @@
     <string name="missed_farthest">"最远"</string>
     <string name="missed_longest">"最长"</string>
     <string name="missed_day_letters">"一,二,三,四,五,六,日"</string>
-    <string name="missed_count_words">"0,一,二,三,四,五,六,七,八,九"</string>
+    <string name="missed_count_words">"0,一,两,三,四,五,六,七,八,九"</string>
     <string name="missed_unit_night">"晚"</string>
     <string name="missed_unit_day">"天"</string>
     <string name="missed_unit_nap">"次小睡"</string>
@@ -1764,4 +1764,6 @@
     <string name="missed_takes_off_about_year">"减少约 1 岁"</string>
     <string name="missed_adds_about_year">"增加约 1 岁"</string>
     <string name="missed_dumping_type">"正在导出类型 %1$s"</string>
+    <string name="missed_list_separator">"，"</string>
+    <string name="missed_head_and_list">"%1$s%2$s。"</string>
 </resources>
