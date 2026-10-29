@@ -12,9 +12,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.openstrap.app.BuildConfig
 import org.openstrap.app.data.settings.Goals
+import org.openstrap.app.data.settings.HealthConnectAuto
 import org.openstrap.app.data.settings.UserProfile
 import org.openstrap.app.ui.dashboard.ScreenList
 import org.openstrap.app.ui.glow.GlowLayout
+import org.openstrap.app.ui.glow.GlowSwitch
 import org.openstrap.app.ui.glow.GlowType
 import org.openstrap.app.ui.glow.PageHeader
 import org.openstrap.app.ui.glow.PageRow
@@ -30,6 +32,27 @@ fun goalsLine(goals: Goals): String = "%,d steps, %d active hours".format(goals.
 /** The Sleep goal row's value, with the sleep need Recovery uses beside it: "7 h 30. Your sleep need is 8 h". */
 fun sleepGoalLine(goals: Goals, needMinutes: Int): String =
     "${hoursMinutes(goals.sleepMinutes)}. Your sleep need is ${hoursMinutes(needMinutes)}"
+
+/**
+ * The auto sync row's value: on and when it last wrote ("On. Last synced 10:42", "yesterday 10:42", "12 Oct"), off,
+ * or stopped by itself and why. [now] in epoch seconds.
+ */
+fun healthConnectLine(auto: HealthConnectAuto, now: Long, zone: java.time.ZoneId, locale: java.util.Locale = java.util.Locale.getDefault()): String {
+    if (!auto.on) return when (auto.stopped) {
+        HealthConnectAuto.Stopped.PERMISSIONS -> "Stopped. Health Connect permissions were turned off"
+        HealthConnectAuto.Stopped.UNAVAILABLE -> "Stopped. Health Connect isn't available on this phone"
+        null -> "Off. Copies new data after each strap sync"
+    }
+    val last = auto.lastSynced ?: return "On. Copies new data after each strap sync"
+    val today = java.time.Instant.ofEpochSecond(now).atZone(zone).toLocalDate()
+    val day = java.time.Instant.ofEpochSecond(last).atZone(zone).toLocalDate()
+    val clock = org.openstrap.app.ui.dashboard.clockText(last, zone, locale = locale)
+    return "On. Last synced " + when (day) {
+        today -> clock
+        today.minusDays(1) -> "yesterday $clock"
+        else -> day.format(java.time.format.DateTimeFormatter.ofPattern("d MMM", locale))
+    }
+}
 
 /**
  * The You page (spec 3.4), from the avatar on any tab: who you are and what happens to your data, things visited
@@ -50,6 +73,9 @@ fun YouPage(
     onRestoreCopy: () -> Unit,
     onHealthConnect: () -> Unit,
     onRestoreHealthConnect: () -> Unit,
+    /** Auto sync to Health Connect, and its switch (on asks for the permissions first). */
+    healthConnectAuto: HealthConnectAuto,
+    onAutoHealthConnect: (Boolean) -> Unit,
     onDiagnostics: () -> Unit,
     onSampleData: (() -> Unit)?,
     onBack: () -> Unit,
@@ -71,7 +97,11 @@ fun YouPage(
             PageRows {
                 PageRow("Save a copy", "A zip of every synced record, saved where you choose", onClick = onSaveCopy, below = true, divider = false, icon = AppIcons.DownloadSimple)
                 PageRow("Restore from a copy", "For days before the strap's history", onClick = onRestoreCopy, below = true, icon = AppIcons.UploadSimple)
-                PageRow("Health Connect", "Copy your data to Android Health Connect", onClick = onHealthConnect, below = true, icon = AppIcons.Heartbeat)
+                val autoLine = healthConnectLine(healthConnectAuto, System.currentTimeMillis() / 1000, java.time.ZoneId.systemDefault())
+                PageRow("Auto sync to Health Connect", autoLine, onClick = { onAutoHealthConnect(!healthConnectAuto.on) }, below = true, icon = AppIcons.Refresh04) {
+                    GlowSwitch(healthConnectAuto.on, onAutoHealthConnect)
+                }
+                PageRow("Copy to Health Connect now", "The last 30 days, to Android Health Connect", onClick = onHealthConnect, below = true, icon = AppIcons.Heartbeat)
                 PageRow("Restore from Health Connect", "Bring back what OpenStrap saved there", onClick = onRestoreHealthConnect, below = true, icon = AppIcons.ArrowCounterClockwise)
             }
         }

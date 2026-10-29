@@ -699,9 +699,15 @@ private fun AppRoot(
     val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         uri?.let(deviceVm::exportCsv)
     }
+    // The write permissions are asked for the manual copy and for turning auto sync on; this says which, and survives
+    // the activity being recreated behind the permission screen.
+    var hcForAuto by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val hcLauncher = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { granted ->
-        if (granted.containsAll(container.healthConnect.permissions)) deviceVm.exportHealthConnect()
-        else Toast.makeText(context, "Health Connect permissions were not granted.", Toast.LENGTH_LONG).show()
+        val auto = hcForAuto
+        hcForAuto = false
+        if (!granted.containsAll(container.healthConnect.permissions)) {
+            Toast.makeText(context, "Health Connect permissions were not granted.", Toast.LENGTH_LONG).show()
+        } else if (auto) deviceVm.setAutoHealthConnect(true) else deviceVm.exportHealthConnect()
     }
     val csvImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(deviceVm::importCsv)
@@ -718,14 +724,21 @@ private fun AppRoot(
             else hcReadLauncher.launch(container.healthConnect.readPermissions)
         }
     }
-    val exportHealthConnect: () -> Unit = {
+    // The manual copy, or turning auto sync on ([forAuto]): with the write permissions, asked for first when missing.
+    val writeHealthConnect: (Boolean) -> Unit = { forAuto ->
         if (!container.healthConnect.isAvailable()) {
             Toast.makeText(context, "Health Connect isn't available on this phone.", Toast.LENGTH_LONG).show()
         } else scope.launch {
-            if (container.healthConnect.hasPermissions()) deviceVm.exportHealthConnect()
-            else hcLauncher.launch(container.healthConnect.permissions)
+            if (container.healthConnect.hasPermissions()) {
+                if (forAuto) deviceVm.setAutoHealthConnect(true) else deviceVm.exportHealthConnect()
+            } else {
+                hcForAuto = forAuto
+                hcLauncher.launch(container.healthConnect.permissions)
+            }
         }
     }
+    val exportHealthConnect: () -> Unit = { writeHealthConnect(false) }
+    val autoHealthConnect: (Boolean) -> Unit = { on -> if (on) writeHealthConnect(true) else deviceVm.setAutoHealthConnect(false) }
 
     // Swiping left and right moves between tabs. [nav] owns the tab and the pager follows it: a tap animates the
     // pager there, and only a swipe the user made, once it settles, is another way to pick the tab. The pager
@@ -1049,6 +1062,9 @@ private fun AppRoot(
                         closeAll = { closePages() },
                         youPage = { open, selected, onBack ->
                             val log by container.strap.log.collectAsStateWithLifecycle()
+                            val hcAuto by deviceVm.healthConnectAuto.collectAsStateWithLifecycle()
+                            // Permissions can be taken back in Health Connect while away: the row says so on return.
+                            androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { deviceVm.checkAutoHealthConnect(); onPauseOrDispose { } }
                             org.openstrap.app.ui.device.YouPage(
                                 profile, goals, org.openstrap.app.data.Recovery.sleepNeed(profile.age(), profile.sleepNeedMinutes), log.size, padding,
                                 onProfile = { open(Page.Profile) },
@@ -1057,6 +1073,8 @@ private fun AppRoot(
                                 onRestoreCopy = { csvImportLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) },
                                 onHealthConnect = exportHealthConnect,
                                 onRestoreHealthConnect = importHealthConnect,
+                                healthConnectAuto = hcAuto,
+                                onAutoHealthConnect = autoHealthConnect,
                                 onDiagnostics = { open(Page.Diagnostics) },
                                 onSampleData = if (org.openstrap.app.data.SampleData.AVAILABLE) ({ deviceVm.loadSampleData() }) else null,
                                 onBack = onBack,
