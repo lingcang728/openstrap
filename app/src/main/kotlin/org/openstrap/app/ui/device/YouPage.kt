@@ -107,7 +107,10 @@ fun YouPage(
                 PageRow("Restore from Health Connect", "Bring back what OpenStrap saved there", onClick = onRestoreHealthConnect, below = true, icon = AppIcons.ArrowCounterClockwise)
             }
         }
-        if (autoBackup != null) item { autoBackup() }
+        if (autoBackup != null) {
+            item { Text("Backup", color = Color.White.copy(alpha = 0.6f), style = GlowType.secondary, modifier = Modifier.padding(start = 18.dp, top = 4.dp)) }
+            item { autoBackup() }
+        }
         item {
             PageRows {
                 PageRow("Diagnostics", "$logLines lines, for bug reports", onClick = onDiagnostics, below = true, divider = false, icon = AppIcons.Bug, selected = selected == "Diagnostics")

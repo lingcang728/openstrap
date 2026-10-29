@@ -1092,7 +1092,7 @@ private fun AppRoot(
                                     val folder = backup.folder?.let(android.net.Uri::parse)
                                     org.openstrap.app.ui.device.AutoBackupRows(
                                         backup, backingUp,
-                                        onTurnOn = { backupFolderLauncher.launch(null) },
+                                        onTurnOn = { backupFolderLauncher.launch(org.openstrap.app.ui.device.BackupCopy.DOCUMENTS) },
                                         onTurnOff = { deviceVm.turnOffBackup() },
                                         onFolder = { backupFolderLauncher.launch(folder) },
                                         onBackUpNow = { deviceVm.backUpNow() },

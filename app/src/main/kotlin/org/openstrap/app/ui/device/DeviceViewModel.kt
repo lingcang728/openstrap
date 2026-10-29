@@ -149,9 +149,7 @@ class DeviceViewModel(private val container: AppContainer) : ViewModel() {
             val settings = result.settings?.let { json ->
                 runCatching { container.settings.restoreValues(org.openstrap.app.export.SettingsBackup.fromJson(json)) }.getOrDefault(0)
             } ?: 0
-            "Restored %,d records from before the strap's history. Left out %,d from days it has.".format(result.total, result.present) +
-                (if (result.skipped > 0) " %,d unreadable rows skipped.".format(result.skipped) else "") +
-                (if (settings > 0) " Your settings came back too." else "")
+            BackupCopy.restored(result.total, settings > 0, result.skipped)
         }.getOrElse { "Couldn't restore the copy: ${it.message}" }
     }
 

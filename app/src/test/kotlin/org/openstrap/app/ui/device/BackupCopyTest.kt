@@ -33,4 +33,12 @@ class BackupCopyTest {
         assertEquals("Couldn't back up. There isn't enough space for it.", BackupCopy.outcome(AutoBackup.Outcome.Failed(BackupFiles.Failure.NoSpace)))
         assertEquals("The folder you chose", BackupCopy.folder(on.copy(folderName = null)))
     }
+
+    @Test fun `a restore says what came back in a toast's worth of words`() {
+        assertEquals("Restored 1,234 records and your settings.", BackupCopy.restored(1234, settings = true, skipped = 0))
+        assertEquals("Restored 12 records.", BackupCopy.restored(12, settings = false, skipped = 0))
+        assertEquals("Restored your settings. Your records were already here.", BackupCopy.restored(0, settings = true, skipped = 0))
+        assertEquals("Nothing to restore. It's all already here.", BackupCopy.restored(0, settings = false, skipped = 0))
+        assertEquals("Restored 12 records. 3 rows couldn't be read.", BackupCopy.restored(12, settings = false, skipped = 3))
+    }
 }

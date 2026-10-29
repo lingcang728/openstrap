@@ -39,6 +39,27 @@ object BackupCopy {
         }
     }
 
+    /**
+     * Where the folder picker opens when backup is first turned on. The top of the phone's storage can't be chosen
+     * ("Can't use this folder"), Documents can, and a folder made inside it too.
+     */
+    val DOCUMENTS: android.net.Uri
+        get() = android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Documents")
+
+    /**
+     * What a restore says, short enough for a toast: what came back, and rows that couldn't be read. Records already on
+     * this phone aren't counted, since restoring only fills gaps.
+     */
+    fun restored(records: Int, settings: Boolean, skipped: Int): String {
+        val what = when {
+            records > 0 && settings -> "Restored %,d records and your settings.".format(records)
+            records > 0 -> "Restored %,d records.".format(records)
+            settings -> "Restored your settings. Your records were already here."
+            else -> "Nothing to restore. It's all already here."
+        }
+        return if (skipped > 0) "$what %,d rows couldn't be read.".format(skipped) else what
+    }
+
     /** The Backup folder row's value. */
     fun folder(state: BackupState): String = state.folderName ?: "The folder you chose"
 
