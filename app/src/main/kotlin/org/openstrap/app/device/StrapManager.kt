@@ -757,6 +757,7 @@ class StrapManager(
                 }
                 runCatching { notifyBodySignals() }.onFailure { log("body signals: $it") }
                 runCatching { WorkoutGapFill(dao) { settings.profile.first() }.run()?.let { log(it) } }.onFailure { log("workout gap fill: $it") }
+                runCatching { updateEffectModel() }.onFailure { log("workout effect: $it") }
                 runCatching { updateDailyEnergy() }.onFailure { log("daily energy: $it") }
                 // Everything a widget shows may have moved (widgets spec 7).
                 WidgetUpdater.changedAll(context)
@@ -782,6 +783,19 @@ class StrapManager(
         if (body.day != day || body.state != org.openstrap.app.data.BodySignals.State.Alert) return
         healthAlerts.showBodySignals(body.families, body.nightsOff)
         settings.setLastSync(BODY_SIGNALS_PUSHED, day)
+    }
+
+    /**
+     * Once per change of [org.openstrap.app.data.WorkoutEffect.MODEL], works out every phone workout's effect again,
+     * so a workout saved under the old model shows the new one's Load. The strap's own figures, where it kept a
+     * record, still win ([org.openstrap.app.data.WorkoutEffectEngine.strapEffect]).
+     */
+    private suspend fun updateEffectModel() {
+        val model = org.openstrap.app.data.WorkoutEffect.MODEL.toLong()
+        if (settings.lastSync(EFFECT_MODEL) == model) return
+        val n = org.openstrap.app.data.WorkoutEffectEngine(dao).recomputeAll(settings.profile.first())
+        settings.setLastSync(EFFECT_MODEL, model)
+        log("workout effect: model $model, $n workouts again")
     }
 
     /**
@@ -1234,6 +1248,8 @@ class StrapManager(
         const val BODY_SIGNALS_PUSHED = "body_signals_push"
         /** [org.openstrap.app.data.DailyEnergyHistory.profileKey] of the profile the daily energy rows were last written with. */
         const val DAILY_ENERGY_PROFILE = "daily_energy_profile"
+        /** The [org.openstrap.app.data.WorkoutEffect.MODEL] phone workouts' effects were last worked out with. */
+        const val EFFECT_MODEL = "workout_effect_model"
         const val AUTO_SYNC_SECONDS = 60 * 60L
         val KEEP_ALIVE_REPLY = byteArrayOf(0x05, 0x02)
         /** The pulsed call buzz: 600 ms on the motor, once a second. */

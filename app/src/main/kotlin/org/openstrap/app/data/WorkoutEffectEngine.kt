@@ -47,10 +47,41 @@ class WorkoutEffectEngine(private val dao: HealthDao) {
         // kcal from scratch over the range as it now stands, so the saved total isn't fitted to the old one.
         val kcal = runCatching { engine.phoneWorkoutKcal(w.copy(totalKcal = null), profile, profile.age(date), restingHr, maxHr, engine.vo2max(profile, date, zone), end, hr) }
             .getOrNull()
-        return WorkoutRecorder.withKcal(w, kcal).copy(
+        val modelled = WorkoutRecorder.withKcal(w, kcal).copy(
             epoc = r.epoc, aerobicTrainingEffect = r.aerobicTe, recoveryMinutes = r.recoveryMinutes,
-            vo2max = if (points == null) w.vo2max else r.vo2max,
+            vo2max = if (points == null) w.vo2max else r.vo2max, anaerobicTrainingEffect = null, effectFromStrap = false,
         )
+        return strapEffect(modelled) ?: modelled
+    }
+
+    /**
+     * [w] with the strap's own effect figures, when the strap kept a record of nearly all of it ([Workouts.strapCovers]),
+     * as it does of a session it ran alongside: its EPOC as Load, both training effects and its recovery time, which
+     * come from Zepp's own models on the strap. Its VO2max stays the phone's. Null when it kept no such record, so the
+     * model's figures stand. The record only arrives with a sync after the workout, hence [takeStrapEffects].
+     */
+    suspend fun strapEffect(w: AppWorkout): AppWorkout? {
+        val end = w.end ?: return null
+        val s = dao.workoutsOnce(w.from, end).firstOrNull { Workouts.strapCovers(it.start..it.end, w.from..end) } ?: return null
+        val effect = Workouts.effectOf(s, dao.sportEffectsOnce(s.start, s.start + Workouts.EFFECT_WINDOW_S))
+        val epoc = effect?.epoc ?: s.trainingLoad?.toFloat() ?: return null
+        return w.copy(
+            epoc = epoc, aerobicTrainingEffect = s.aerobicTrainingEffect, anaerobicTrainingEffect = s.anaerobicTrainingEffect,
+            recoveryMinutes = effect?.recoveryMinutes ?: w.recoveryMinutes, effectFromStrap = true,
+        )
+    }
+
+    /**
+     * After a sync: each phone workout that ended since [since] takes the strap's figures when the strap's record of it
+     * has come in ([strapEffect]). Only the effect columns are written, and only when they change.
+     */
+    suspend fun takeStrapEffects(since: Long) {
+        for (w in dao.appWorkoutsOnce(since, Long.MAX_VALUE)) {
+            if (w.end == null) continue
+            val s = strapEffect(w) ?: continue
+            if (s == w) continue
+            dao.updateAppWorkoutEffect(w.start, s.epoc, s.aerobicTrainingEffect, s.recoveryMinutes, s.vo2max, s.anaerobicTrainingEffect, fromStrap = true)
+        }
     }
 
     /**
@@ -75,6 +106,23 @@ class WorkoutEffectEngine(private val dao: HealthDao) {
         dao.restingHrOnce(t - Recovery.RHR_DAYS * DAY, t).associate { it.day to it.bpm.toFloat() }, emptyMap(), dayStart(t, zone),
     ) ?: DEFAULT_RESTING_HR
 
+    /**
+     * Works out and saves every finished phone workout's figures again, oldest first so each one's activity class and
+     * load trend read the earlier ones as now worked out. The workouts done.
+     */
+    suspend fun recomputeAll(profile: UserProfile): Int {
+        var n = 0
+        for (w in dao.appWorkoutsAll().filter { it.end != null }.sortedBy { it.start }) {
+            val hr = dao.appWorkoutHeartRateOnce(w.start)
+            if (hr.isEmpty()) continue
+            val e = runCatching { withEffect(w, hr, profile) }.getOrNull() ?: continue
+            if (e.epoc == null) continue
+            dao.updateAppWorkoutEffect(w.start, e.epoc, e.aerobicTrainingEffect, e.recoveryMinutes, e.vo2max, e.anaerobicTrainingEffect, e.effectFromStrap)
+            n++
+        }
+        return n
+    }
+
     /** Works out and saves the figures of a finished workout that has none yet (one from before version 14). */
     suspend fun backfill(w: AppWorkout, profile: UserProfile) {
         if (w.end == null || w.epoc != null) return
@@ -83,7 +131,7 @@ class WorkoutEffectEngine(private val dao: HealthDao) {
         val e = withEffect(w, hr, profile)
         // Nothing to save without a valid reading; writing anyway would only wake every reader of the table.
         if (e.epoc == null) return
-        dao.updateAppWorkoutEffect(w.start, e.epoc, e.aerobicTrainingEffect, e.recoveryMinutes, e.vo2max)
+        dao.updateAppWorkoutEffect(w.start, e.epoc, e.aerobicTrainingEffect, e.recoveryMinutes, e.vo2max, e.anaerobicTrainingEffect, e.effectFromStrap)
     }
 
     /**

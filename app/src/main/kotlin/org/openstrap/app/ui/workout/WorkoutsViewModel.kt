@@ -53,6 +53,8 @@ data class PhoneSummary(
     val laps: List<WorkoutRecorder.Lap> = emptyList(),
     /** Finished pauses, which no split counts. */
     val pauses: List<LongRange> = emptyList(),
+    /** Its effect figures are the strap's own ([org.openstrap.app.data.db.AppWorkout.effectFromStrap]). */
+    val effectFromStrap: Boolean = false,
 )
 
 /** Workouts list (newest first) and the one open in detail. */
@@ -196,7 +198,7 @@ class WorkoutsViewModel(private val dao: HealthDao, private val profile: Flow<Us
                     w.lapMarks.takeIf { it.isNotEmpty() }?.let { marks ->
                         WorkoutRecorder.laps(w.from, w.end ?: a.end, marks, hr.filter { !it.fromHistory }.map { it.timestamp to it.bpm }, route, w.pauseRanges)
                     }.orEmpty(),
-                    w.pauseRanges,
+                    w.pauseRanges, w.effectFromStrap,
                 )
             }.flowOn(Dispatchers.Default)
 

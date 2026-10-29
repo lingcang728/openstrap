@@ -129,6 +129,20 @@ object Workouts {
         return length - overlap <= maxOf(SAME_WORKOUT_OUTSIDE_S, (length * SAME_WORKOUT_OUTSIDE_SHARE).toLong())
     }
 
+    /** The share of a phone workout a strap record must cover for its figures to stand for the phone workout's. */
+    const val STRAP_EFFECT_COVER = 0.9f
+
+    /**
+     * Whether the strap record over [strap] covers nearly all of the phone workout over [phone] ([STRAP_EFFECT_COVER]),
+     * as a session it ran alongside does, so its own EPOC and training effect describe the whole workout. One the strap
+     * only noticed partway through doesn't: its figures are for part of it.
+     */
+    fun strapCovers(strap: LongRange, phone: LongRange): Boolean {
+        val length = phone.last - phone.first
+        val overlap = minOf(strap.last, phone.last) - maxOf(strap.first, phone.first)
+        return length > 0 && overlap >= length * STRAP_EFFECT_COVER && sameWorkout(strap, phone)
+    }
+
     /** The phone workout of [phone] that [w] is the strap's record of ([sameWorkout]), if any. */
     fun phoneTwin(w: Workout, phone: List<org.openstrap.app.data.db.AppWorkout>, now: Long): org.openstrap.app.data.db.AppWorkout? =
         phone.firstOrNull { sameWorkout(w.start..w.end, phoneRange(it, now)) }

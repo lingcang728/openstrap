@@ -180,8 +180,8 @@ interface HealthDao {
     suspend fun insertAppWorkouts(workouts: List<AppWorkout>)
 
     /** Only a workout's effect figures, so working them out for an old workout can't undo a trim made meanwhile. */
-    @Query("UPDATE app_workout SET epoc = :epoc, aerobicTrainingEffect = :aerobicTe, recoveryMinutes = :recoveryMinutes, vo2max = :vo2max WHERE start = :start")
-    suspend fun updateAppWorkoutEffect(start: Long, epoc: Float?, aerobicTe: Float?, recoveryMinutes: Int?, vo2max: Float?)
+    @Query("UPDATE app_workout SET epoc = :epoc, aerobicTrainingEffect = :aerobicTe, recoveryMinutes = :recoveryMinutes, vo2max = :vo2max, anaerobicTrainingEffect = :anaerobicTe, effectFromStrap = :fromStrap WHERE start = :start")
+    suspend fun updateAppWorkoutEffect(start: Long, epoc: Float?, aerobicTe: Float?, recoveryMinutes: Int?, vo2max: Float?, anaerobicTe: Float? = null, fromStrap: Boolean = false)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAppWorkoutHeartRate(samples: List<AppWorkoutHeartRate>)

@@ -156,7 +156,7 @@ fun GlowWorkoutDetailScreen(
             }
         }
     }
-    if (info && shown != null) EffectInfo(shown, usual, phone?.strapWorkouts.orEmpty(), onDismiss = { info = false })
+    if (info && shown != null) EffectInfo(shown, usual, phone?.strapWorkouts.orEmpty(), phone?.effectFromStrap == true, onDismiss = { info = false })
 }
 
 /**
@@ -312,7 +312,7 @@ private fun FactsList(facts: List<WorkoutFact>, summary: PhoneSummary?) {
 
 /** The (i) on the Load card: Load, training effect, time to recover, the heart rate drop and VO2 max explained. */
 @Composable
-private fun EffectInfo(a: WorkoutAnalysis, usual: Float?, strap: List<WorkoutAnalysis>, onDismiss: () -> Unit) {
+private fun EffectInfo(a: WorkoutAnalysis, usual: Float?, strap: List<WorkoutAnalysis>, fromStrap: Boolean, onDismiss: () -> Unit) {
     val w = a.workout
     val sheet = WorkoutDetailCopy.effectSheet(
         aerobic = w.aerobicTrainingEffect, anaerobic = w.anaerobicTrainingEffect, load = w.trainingLoad, usualLoad = usual,
@@ -324,6 +324,7 @@ private fun EffectInfo(a: WorkoutAnalysis, usual: Float?, strap: List<WorkoutAna
                 from = Instant.ofEpochSecond(s.workout.start).atZone(ZoneId.systemDefault()).toLocalTime().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),
             )
         },
+        effectFromStrap = fromStrap,
     )
     InfoSheet(sheet.info, MetricColors.load, sheet.here, sheet.hereLine, onDismiss, rows = sheet.rows)
 }

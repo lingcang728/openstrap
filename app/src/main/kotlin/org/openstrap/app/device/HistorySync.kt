@@ -138,6 +138,9 @@ class HistorySync(
                 }
             }
             if (only == null && session.services.has(Endpoints.READINESS)) runCatching { syncReadiness() }.onFailure { log("readiness: $it") }
+            // A session the strap ran alongside a phone workout has just come in: its figures replace the model's.
+            runCatching { org.openstrap.app.data.WorkoutEffectEngine(dao).takeStrapEffects(System.currentTimeMillis() / 1000 - WORKOUT_LOOKBACK) }
+                .onFailure { log("strap effect: $it") }
             state.value = SyncState.Done(System.currentTimeMillis() / 1000)
         } catch (e: FastRechargeModeException) {
             // Zepp ends the sync job at once in this mode (xyk.java:66-70); the data waits on the strap.

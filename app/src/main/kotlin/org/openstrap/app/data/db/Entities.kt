@@ -202,6 +202,13 @@ data class AppWorkout(
     val aerobicTrainingEffect: Float? = null,
     val recoveryMinutes: Int? = null,
     val vo2max: Float? = null,
+    /** Anaerobic training effect 0–5: only from the strap ([effectFromStrap]), as no open model makes one. */
+    val anaerobicTrainingEffect: Float? = null,
+    /**
+     * The effect figures are the strap's own, from a record it kept of nearly all of this workout
+     * ([org.openstrap.app.data.WorkoutEffectEngine.strapEffect]), rather than OpenStrap's model.
+     */
+    @ColumnInfo(defaultValue = "0") val effectFromStrap: Boolean = false,
     /**
      * kcal over the shown range less pauses, above rest and in all ([org.openstrap.app.data.EnergyExpenditure.workoutMinutes]).
      * Worked out when it ends and again on a trim or a gap fill; null without a profile, and on workouts from before

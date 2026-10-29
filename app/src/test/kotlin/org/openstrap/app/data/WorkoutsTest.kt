@@ -144,4 +144,13 @@ class WorkoutsTest {
         // With no phone workout over it, the strap's is listed as before.
         assertEquals(1, Workouts.listed(listOf(detected), emptyList(), emptyList(), emptyList(), emptyMap(), 190).size)
     }
+
+    @Test
+    fun onlyARecordOfNearlyAllOfAPhoneWorkoutStandsForItsEffect() {
+        val walk = start..(start + 6892)
+        // A session the strap ran alongside, a few seconds off at each end: its figures are the walk's.
+        org.junit.Assert.assertTrue(Workouts.strapCovers((start + 3)..(start + 6880), walk))
+        // The strap noticed only the last 37 minutes: a third of it, so the model stands.
+        org.junit.Assert.assertFalse(Workouts.strapCovers((start + 4638)..(start + 6876), walk))
+    }
 }

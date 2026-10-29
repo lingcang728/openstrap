@@ -32,8 +32,18 @@ class WorkoutEffectTest {
     @Test
     fun easyHalfHourIsALowTrainingEffect() {
         val r = effect(easy)
-        assertTrue("TE ${r.aerobicTe}", r.aerobicTe!! in 1.5f..2.5f)
-        assertTrue("EPOC ${r.epoc}", r.epoc!! in 10f..25f)
+        assertTrue("TE ${r.aerobicTe}", r.aerobicTe!! in 2.0f..2.8f)
+        assertTrue("EPOC ${r.epoc}", r.epoc!! in 20f..40f)
+    }
+
+    @Test
+    fun anEasyWalkLandsNearTheStrapsOwnAndKeepsAdding() {
+        // The strap's own record of a walk: 37 min at 117 bpm, resting 70 and max 187 (HRR 0.4), EPOC 16.3.
+        fun walk(minutes: Int) = List(minutes * 60) { (start + it) to 117 }
+        fun epoc(minutes: Int) = WorkoutEffect.compute(3, walk(minutes), start, start + minutes * 60L, emptyList(), emptyList(), 70f, 187f, 0f, null).epoc!!
+        assertTrue("EPOC ${epoc(37)}", epoc(37) in 12f..20f)
+        // Nothing clears during it: the same pace for 106 minutes gives near three times as much.
+        assertEquals(106f / 37f, epoc(106) / epoc(37), 0.05f)
     }
 
     @Test

@@ -183,12 +183,13 @@ object WorkoutDetailCopy {
     /**
      * The (i) on the Load card: Load (EPOC), training effect on its 0 to 5 scales, time to recover, the heart rate drop
      * and VO2 max, each explained plainly with this workout's value and left out when it has none. [fromPhone] says who
-     * worked them out; [strap] are the strap's own records of a phone workout, by start, when it kept any.
+     * worked them out, and [effectFromStrap] that a phone workout's are the strap's own; [strap] are the strap's own
+     * records of a phone workout, by start, when it kept any and its figures aren't already the ones shown.
      */
     fun effectSheet(
         aerobic: Float?, anaerobic: Float?, load: Int?, usualLoad: Float?, recoveryMinutes: Int?,
         drop60: Int?, drop120: Int?, endBpm: Int?, meaningfulDrop: Boolean, vo2max: Float?,
-        fromPhone: Boolean, strap: List<EffectFigures>,
+        fromPhone: Boolean, strap: List<EffectFigures>, effectFromStrap: Boolean = false,
     ): EffectSheet {
         val rows = listOfNotNull(
             load?.let { l ->
@@ -219,8 +220,12 @@ object WorkoutDetailCopy {
             },
             vo2max?.let { "VO2 max" to "The most oxygen your body can use, in ml per kg per minute, estimated from this workout: ${Math.round(it)}." },
             "Where these come from" to (
-                if (fromPhone) "Worked out by OpenStrap from your heart rate, on the strap's own scales." else "From the strap, worked out during the workout."
-                ) + strapLine(strap),
+                when {
+                    effectFromStrap -> "From the strap, which recorded this workout alongside the phone and worked these out itself."
+                    fromPhone -> "Worked out by OpenStrap from your heart rate, on the strap's own scales."
+                    else -> "From the strap, worked out during the workout."
+                }
+                ) + if (effectFromStrap) "" else strapLine(strap),
         )
         val info = Info(
             name = "Load and training effect",

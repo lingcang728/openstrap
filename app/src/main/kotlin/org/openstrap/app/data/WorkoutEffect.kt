@@ -14,6 +14,9 @@ import kotlin.math.sqrt
  * HR-only model holds up for short efforts, where heart rate lags the work by tens of seconds.
  */
 object WorkoutEffect {
+    /** Raised when [epoc] changes, so saved workouts are worked out again once (StrapManager.updateEffectModel). */
+    const val MODEL = 2
+
     /** Zepp works in 5-sample epochs of 1 Hz data, each read as its median HR (native 04 §3.1). */
     const val EPOCH_S = 5L
     /** Heart rate outside this is the sensor, not a heartbeat (native 04 §3 step 2). */
@@ -53,33 +56,29 @@ object WorkoutEffect {
     /* ------------------------------------------------ EPOC ------------------------------------------------ */
 
     /**
-     * EPOC accumulation rate at full rest-to-max reserve scale: dE/dt = [EPOC_RATE]·(e^([EPOC_STEEPNESS]·i) − 1) in
-     * ml/kg/min at intensity i. Fitted (WorkoutEffectTest) so that 30 easy minutes at 60 % HRR land near aerobic TE 2,
-     * a 60-minute tempo at 85 % near TE 5, and 6 × 3-minute intervals near TE 3.5–4, on Zepp's class-50 scale.
+     * EPOC added a minute at intensity i: [EPOC_RATE]·(e^([EPOC_STEEPNESS]·i) − 1) ml/kg. The level is fitted to the
+     * strap's own EPOC on three of its workouts over the same heart rate (37 min at 117 bpm gave 16.3, 9 min at 119
+     * gave 6), all easy; the steepness keeps harder work where it was aimed before, so 30 minutes at 60 % HRR land
+     * near aerobic TE 2.5, a 60-minute tempo at 85 % at TE 5, and 6 × 3-minute intervals near TE 3.7, on Zepp's
+     * class-50 scale (WorkoutEffectTest). A fallback for when the strap kept no record of its own ([WorkoutEffectEngine]).
      */
-    const val EPOC_RATE = 0.01
-    const val EPOC_STEEPNESS = 7.0
+    const val EPOC_RATE = 0.077
+    const val EPOC_STEEPNESS = 4.5
 
     /**
-     * Peak EPOC (ml/kg) over [epochs], the quantity Firstbeat derives training effect from (Firstbeat 2005, "Indirect
-     * EPOC prediction method based on heart rate measurement"; "EPOC based training effect assessment"). As there,
-     * EPOC is a running function of its last value, intensity and time, with intensity as %VO2max from heart-rate
-     * reserve (%HRR ≈ %VO2R, Swain & Leutholtz 1997). Ours: each epoch E += [rate − k·(1 − i)·E]·Δt, the rate rising
-     * exponentially with intensity (EPOC grows exponentially with intensity and linearly with duration, Børsheim &
-     * Bahr 2003), and clearance at Charge's EPOC decay ([Recovery.EPOC_DECAY]) at rest, none at max. Coefficients are
-     * OpenStrap's own fit, not Firstbeat's or Zepp's.
+     * EPOC (ml/kg) over [epochs], the quantity training effect is read from. As Zepp's (native 04 §4.2), it only adds:
+     * each epoch puts in a share that grows exponentially with intensity (EPOC grows exponentially with intensity and
+     * linearly with duration, Børsheim & Bahr 2003), intensity being the heart-rate reserve (%HRR ≈ %VO2R, Swain &
+     * Leutholtz 1997), and nothing is taken off during the workout. An earlier version let EPOC clear as it went and
+     * took its peak, which held a long easy walk to a third of what the strap gave. Coefficients are OpenStrap's own
+     * fit, not Zepp's network.
      */
     fun epoc(epochs: List<Epoch>, restingHr: Float, maxHr: Float): Float {
-        val k = 1.0 - Recovery.EPOC_DECAY
         val dt = EPOCH_S / 60.0
-        var e = 0.0
-        var peak = 0.0
-        for (ep in epochs) {
-            val i = Recovery.hrr(ep.bpm, restingHr, maxHr).toDouble().coerceAtMost(1.0)
-            e = (e + (EPOC_RATE * (exp(EPOC_STEEPNESS * i) - 1) - k * (1 - i) * e) * dt).coerceAtLeast(0.0)
-            if (e > peak) peak = e
-        }
-        return peak.toFloat()
+        return epochs.sumOf { ep ->
+            val i = Recovery.hrr(ep.bpm, restingHr, maxHr).toDouble().coerceIn(0.0, 1.0)
+            EPOC_RATE * (exp(EPOC_STEEPNESS * i) - 1) * dt
+        }.toFloat()
     }
 
     /* ------------------------------------------- Training effect ------------------------------------------- */

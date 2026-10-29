@@ -105,8 +105,8 @@ object WorkoutRecorder {
         maxHeartRate = stats?.max ?: w.maxHeartRate,
         minHeartRate = stats?.min,
         aerobicTrainingEffect = w.aerobicTrainingEffect,
-        // No open model holds up for it from heart rate alone ([WorkoutEffect]).
-        anaerobicTrainingEffect = null,
+        // Only the strap's: no open model holds up for it from heart rate alone ([WorkoutEffect]).
+        anaerobicTrainingEffect = w.anaerobicTrainingEffect,
         // The strap's load is Zepp's int EPOC (native 04 §2.1); ours is on the same scale, so the two compare.
         trainingLoad = w.epoc?.toInt(),
         vo2max = w.vo2max?.let { Math.round(it) },

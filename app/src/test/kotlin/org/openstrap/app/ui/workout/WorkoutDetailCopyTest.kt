@@ -154,6 +154,15 @@ class WorkoutDetailCopyTest {
         assertTrue(s.rows[1].second.contains("Its own figures: aerobic 3.0, anaerobic 0.8, Load 80, time to recover 12 h."))
     }
 
+    @Test fun `a phone workout with the strap's own figures says so, and doesn't repeat them`() {
+        val s = WorkoutDetailCopy.effectSheet(
+            aerobic = 2.1f, anaerobic = 0.1f, load = 16, usualLoad = null, recoveryMinutes = 660,
+            drop60 = null, drop120 = null, endBpm = null, meaningfulDrop = false, vo2max = null,
+            fromPhone = true, strap = listOf(EffectFigures(2.1f, 0.1f, 16, 660)), effectFromStrap = true,
+        )
+        assertEquals("From the strap, which recorded this workout alongside the phone and worked these out itself.", s.rows.last().second)
+    }
+
     @Test fun `a long workout that held two strap records names both`() {
         val s = WorkoutDetailCopy.effectSheet(
             aerobic = null, anaerobic = null, load = 60, usualLoad = null, recoveryMinutes = null,
