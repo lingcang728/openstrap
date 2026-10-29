@@ -191,16 +191,18 @@ internal fun activeSeconds(r: WorkoutState.Recording): Long = produceState(Worko
     }
 }.value
 
-/** A target's colour: the top zone it aims for, a calm blue for a time, white for none. */
+/** A target's colour: the top zone it aims for, a calm blue for a time, Calories' gold for kcal, white for none. */
 internal fun targetColor(t: WorkoutTarget?): Color = when (t) {
     is WorkoutTarget.Zones -> ZONE_COLORS[t.high]
     is WorkoutTarget.Time -> ZONE_COLORS[0]
+    is WorkoutTarget.Kcal -> MetricColors.calories
     null -> Color.White
 }
 
 internal fun targetLabel(t: WorkoutTarget?): String = when (t) {
     is WorkoutTarget.Zones -> t.label
     is WorkoutTarget.Time -> t.label
+    is WorkoutTarget.Kcal -> t.label
     null -> "None"
 }
 
@@ -531,6 +533,8 @@ fun GlowWorkoutReadyScreen(
     sides: Map<Int, Boolean> = emptyMap(),
     onSide: (sport: Int, indoor: Boolean) -> Unit = { _, _ -> },
     onTurnOnLocation: (then: () -> Unit) -> Unit = { it() },
+    /** kcal targets are offered: there's a profile to work kcal out from. */
+    kcalTargets: Boolean = false,
 ) {
     var picking by rememberSaveable { mutableStateOf(pickSport) }
     var askToEnd by rememberSaveable { mutableStateOf(true) }
@@ -555,7 +559,8 @@ fun GlowWorkoutReadyScreen(
     var setsTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     var restSeconds by rememberSaveable { mutableStateOf(Strength.Rest.DEFAULT.seconds) }
     var restBelow by rememberSaveable { mutableStateOf<Int?>(null) }
-    val target = WorkoutTarget.parse(targetCode)
+    // A kcal target picked before the profile went is dropped with its chip.
+    val target = WorkoutTarget.parse(targetCode)?.takeIf { it in WorkoutTarget.offered(kcalTargets) }
     var info by rememberSaveable { mutableStateOf(false) }
     val haptics = rememberHaptics()
     if (picking) {
@@ -623,10 +628,10 @@ fun GlowWorkoutReadyScreen(
             Chips(Strength.Rest.LEVELS.map { it?.let { b -> "$b bpm" } ?: "Off" }, Strength.Rest.LEVELS.indexOf(restBelow), Color.White) { restBelow = Strength.Rest.LEVELS[it] }
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ChipLabel("Target. The strap buzzes if you drift out.")
+            ChipLabel(WorkoutCopy.targetHint(target))
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                (listOf<WorkoutTarget?>(null) + WorkoutTarget.presets).forEach { t ->
-                    Chip(targetLabel(t), t?.code == targetCode, targetColor(t)) { targetCode = t?.code }
+                (listOf<WorkoutTarget?>(null) + WorkoutTarget.offered(kcalTargets)).forEach { t ->
+                    Chip(targetLabel(t), t == target, targetColor(t)) { targetCode = t?.code }
                 }
             }
         }
@@ -942,7 +947,7 @@ fun GlowWorkoutLiveScreen(
         val heartCard: @Composable () -> Unit = {
             WorkoutHeartCard(
                 r, liveHeartRate, recent, zoneSeconds, connected, active,
-                Modifier.fillMaxWidth().onSizeChanged { cardHeight = with(density) { it.height.toDp() } },
+                Modifier.fillMaxWidth().onSizeChanged { cardHeight = with(density) { it.height.toDp() } }, kcal = kcal?.active,
             )
         }
         // GPS workouts have two views, heart rate and the map, with two dots under them (pattern D5). They swipe as
@@ -1117,6 +1122,8 @@ private fun WorkoutHeartCard(
     active: Long,
     modifier: Modifier,
     fill: Boolean = false,
+    /** The live active kcal, for a kcal target's progress. */
+    kcal: Float? = null,
 ) {
     val bpm = liveHeartRate.takeIf { connected && !r.paused }
     val zone = WorkoutRecorder.liveZone(bpm, r.maxHeartRate)
@@ -1168,6 +1175,7 @@ private fun WorkoutHeartCard(
                 when (val t = WorkoutTarget.parse(r.workout.target)) {
                     is WorkoutTarget.Zones -> Note("Target ${t.label.removePrefix("Zone ")}, the strap buzzes if you drift")
                     is WorkoutTarget.Time -> Note("${workoutClock(active)} of ${t.label}")
+                    is WorkoutTarget.Kcal -> Note(WorkoutCopy.kcalProgress(kcal, t))
                     null -> Unit
                 }
             }
@@ -1187,10 +1195,11 @@ fun GlowWorkoutGlance(
     zoneSeconds: IntArray,
     connection: ConnectionState,
     modifier: Modifier = Modifier,
+    kcal: WorkoutRecorder.Kcal? = null,
 ) {
     val connected = connection is ConnectionState.Connected
     Box(modifier.background(Color.Black).statusBarsPadding().padding(horizontal = GlowLayout.Gutter, vertical = 12.dp)) {
-        WorkoutHeartCard(r, liveHeartRate, recent, zoneSeconds, connected, activeSeconds(r), Modifier.fillMaxSize(), fill = true)
+        WorkoutHeartCard(r, liveHeartRate, recent, zoneSeconds, connected, activeSeconds(r), Modifier.fillMaxSize(), fill = true, kcal = kcal?.active)
     }
 }
 

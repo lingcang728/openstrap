@@ -5,6 +5,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import org.openstrap.app.data.Route
+import org.openstrap.app.data.WorkoutTarget
 import org.openstrap.app.data.Workouts
 import org.openstrap.app.ui.dashboard.TodayCopy
 import org.openstrap.app.ui.dashboard.sportNoun
@@ -127,6 +128,22 @@ object SummaryCopy {
         total == null || total <= 0 -> null
         active == null || active == total -> "%,d kcal".format(locale, total)
         else -> "%,d active kcal, total %,d".format(locale, active, total)
+    }
+
+    /**
+     * The workout card's kcal target ([target], a [WorkoutTarget.code]): "Target 400 kcal, reached at 38:10" from
+     * [reachedSeconds], or "Target not reached, 212 of 400 kcal" from [activeKcal]. A workout that got there without a
+     * time (a gap fill brought it over) is just "reached". Null for no target or another kind.
+     */
+    fun targetLine(target: String?, reachedSeconds: Long?, activeKcal: Int?, locale: Locale = Locale.getDefault()): String? {
+        val k = WorkoutTarget.parse(target) as? WorkoutTarget.Kcal ?: return null
+        val goal = "%,d".format(locale, k.kcal)
+        return when {
+            reachedSeconds != null -> "Target $goal kcal, reached at ${workoutClock(reachedSeconds)}"
+            activeKcal != null && activeKcal >= k.kcal -> "Target $goal kcal, reached"
+            activeKcal != null -> "Target not reached, %,d of $goal kcal".format(locale, activeKcal)
+            else -> "Target $goal kcal, not reached"
+        }
     }
 
     /** A lap's line on the list: "1.02 km, average 150 bpm"; null with neither. */

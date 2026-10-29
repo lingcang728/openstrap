@@ -38,6 +38,10 @@ data class WorkoutAnalysis(
     val sets: Int? = null,
     /** A phone workout's saved active kcal ([org.openstrap.app.data.db.AppWorkout.activeKcal]); null for the strap's. */
     val activeKcal: Float? = null,
+    /** A phone workout's target ([WorkoutTarget.code]); null for none and for the strap's. */
+    val target: String? = null,
+    /** Active seconds into the shown workout when its kcal target was reached; null when it wasn't, or not inside it. */
+    val targetReachedSeconds: Long? = null,
 ) {
     val durationSeconds: Long get() = end - shownStart
 

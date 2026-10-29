@@ -125,8 +125,16 @@ object WorkoutRecorder {
                 fromPhone = true, historyMinutes = shown.count { it.fromHistory }, historyRanges = historyRanges(shown),
                 shownStart = w.from, recordedEnd = w.recordedEnd, recoveryMinutes = w.recoveryMinutes,
                 distanceMeters = w.distanceMeters, distanceFromSteps = w.distanceFromSteps, activeKcal = w.activeKcal,
+                target = w.target, targetReachedSeconds = reachedSeconds(w, end),
             )
     }
+
+    /**
+     * Active seconds into [w] when its kcal target was reached: from its shown start, less the pauses before. Null when
+     * it wasn't, or when a trim left that moment outside the shown range up to [end].
+     */
+    fun reachedSeconds(w: AppWorkout, end: Long = w.end ?: Long.MAX_VALUE): Long? =
+        w.targetReachedAt?.takeIf { it in w.from..end }?.let { (it - w.from - w.pausedSeconds(it)).coerceAtLeast(0) }
 
     /** The samples inside the shown range; a history row stands for its whole minute, so it counts when the minute overlaps. */
     fun shown(w: AppWorkout, hr: List<AppWorkoutHeartRate>, end: Long = w.end ?: Long.MAX_VALUE): List<AppWorkoutHeartRate> =

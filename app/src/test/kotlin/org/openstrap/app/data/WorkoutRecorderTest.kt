@@ -303,4 +303,19 @@ class WorkoutRecorderTest {
         val walked = tick(w, readings, start + 600, totals = totals)!!
         assertTrue(walked.active > hrOnly.active * 1.5f)
     }
+
+    @Test
+    fun kcalTargetReachedTimeLeavesPausesOutAndTrimsHold() {
+        val start = 1_700_000_000L
+        val w = AppWorkout(start, start + 3000, 1, target = "k:300", targetReachedAt = start + 1700).withPause(start + 600, start + 900)
+        // 1700 s in, 300 of them paused.
+        assertEquals(1400L, WorkoutRecorder.reachedSeconds(w))
+        assertEquals(1400L, WorkoutRecorder.analyse(w, emptyList(), 190).targetReachedSeconds)
+        assertEquals("k:300", WorkoutRecorder.analyse(w, emptyList(), 190).target)
+        // Trimmed so it starts later: counted from the new start.
+        assertEquals(700L, WorkoutRecorder.reachedSeconds(w.copy(shownStart = start + 1000)))
+        // Trimmed to end before it was reached, or never reached: no time.
+        assertNull(WorkoutRecorder.reachedSeconds(w.copy(end = start + 1500)))
+        assertNull(WorkoutRecorder.reachedSeconds(w.copy(targetReachedAt = null)))
+    }
 }

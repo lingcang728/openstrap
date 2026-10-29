@@ -1,6 +1,7 @@
 package org.openstrap.app.ui.workout
 
 import org.openstrap.app.data.Route
+import org.openstrap.app.data.WorkoutTarget
 import org.openstrap.app.data.Workouts
 import org.openstrap.app.device.ConnectionState
 import org.openstrap.app.ui.glow.workoutClock
@@ -217,6 +218,15 @@ object WorkoutCopy {
 
     /** Under the row until the first tap on a side figure. */
     const val SIDES_HINT = "Tap a figure to change it"
+
+    /** The label over Ready's targets: what the strap does for the one chosen. */
+    fun targetHint(target: WorkoutTarget?): String = when (target) {
+        is WorkoutTarget.Kcal -> "Target. The strap buzzes at ${target.kcal} active kcal."
+        else -> "Target. The strap buzzes if you drift out."
+    }
+
+    /** The live heart card's progress toward a kcal target: "212 of 300 kcal". */
+    fun kcalProgress(activeKcal: Float?, target: WorkoutTarget.Kcal): String = "${activeKcal?.toInt() ?: 0} of ${target.label}"
 
     /** "312 kcal" for the notification and the capsule; null before there's a figure. */
     fun kcalText(activeKcal: Float?): String? = activeKcal?.let { "${it.toInt()} kcal" }

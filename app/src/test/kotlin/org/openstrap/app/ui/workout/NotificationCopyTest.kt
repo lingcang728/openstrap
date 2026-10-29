@@ -58,6 +58,7 @@ class NotificationCopyTest {
         assertEquals(3, numbers(c))
         assertEquals("16 min in Zone 2–3", card(gps = false, target = WorkoutTarget.Zones(1, 2)).detail)
         assertEquals("Goal 30 min", card(gps = false, target = WorkoutTarget.Time(1800)).detail)
+        assertEquals("Goal 500 kcal", card(gps = false, target = WorkoutTarget.Kcal(500)).detail)
         // No reading, no zone time.
         assertNull(card(gps = false, bpm = null).detail)
     }

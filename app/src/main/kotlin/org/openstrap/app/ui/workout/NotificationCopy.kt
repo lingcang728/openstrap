@@ -79,6 +79,7 @@ object NotificationCopy {
                 "${inTarget / 60} min in ${target.label}"
             }
             target is WorkoutTarget.Time -> "Goal ${target.label}"
+            target is WorkoutTarget.Kcal -> "Goal ${target.label}"
             zone != null -> WorkoutCopy.zoneTime(zoneSeconds.getOrElse(zone) { 0 })
             else -> null
         }

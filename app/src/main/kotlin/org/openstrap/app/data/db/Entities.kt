@@ -209,6 +209,8 @@ data class AppWorkout(
      */
     val activeKcal: Float? = null,
     val totalKcal: Float? = null,
+    /** When the live active kcal first reached a kcal [target], epoch seconds; null until then and for other targets. */
+    val targetReachedAt: Long? = null,
 ) {
     val lapMarks: List<Long> get() = laps.split(',').mapNotNull { it.toLongOrNull() }
 

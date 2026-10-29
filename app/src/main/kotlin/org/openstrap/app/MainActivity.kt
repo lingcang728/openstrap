@@ -811,7 +811,8 @@ private fun AppRoot(
           if (workoutOnTop != null) {
               val recent by container.workout.recent.collectAsStateWithLifecycle()
               val zoneSeconds by container.workout.zoneSeconds.collectAsStateWithLifecycle()
-              org.openstrap.app.ui.glow.GlowWorkoutGlance(workoutOnTop, live, recent, zoneSeconds, realConnection, top)
+              val kcal by container.workout.kcal.collectAsStateWithLifecycle()
+              org.openstrap.app.ui.glow.GlowWorkoutGlance(workoutOnTop, live, recent, zoneSeconds, realConnection, top, kcal)
           } else org.openstrap.app.ui.glow.GlowTabletopHeart(
               day, live, liveEnabled.takeIf { realConnection is ConnectionState.Connected }, { container.strap.setLiveHeartRate(it) }, top,
           )
@@ -1339,6 +1340,7 @@ private fun androidx.compose.foundation.layout.BoxScope.WorkoutLayer(
     // True until read, so the hint never flashes for someone who has already tapped.
     val figureTapped by container.settings.workoutFigureTapped.collectAsStateWithLifecycle(true)
     val kcal by session.kcal.collectAsStateWithLifecycle()
+    val profile by container.settings.profile.collectAsStateWithLifecycle(null)
     val viewScope = rememberCoroutineScope()
     val padding = androidx.compose.foundation.layout.WindowInsets.navigationBars.asPaddingValues()
     val full = androidx.compose.ui.Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
@@ -1376,7 +1378,7 @@ private fun androidx.compose.foundation.layout.BoxScope.WorkoutLayer(
                     androidx.compose.foundation.layout.Row(androidx.compose.ui.Modifier.fillMaxSize()) {
                         org.openstrap.app.ui.glow.GlowWorkoutGlance(
                             state, live, recent, zoneSeconds, connection,
-                            androidx.compose.ui.Modifier.width(with(density) { bookHinge.bounds.left.toDp() }).fillMaxHeight(),
+                            androidx.compose.ui.Modifier.width(with(density) { bookHinge.bounds.left.toDp() }).fillMaxHeight(), kcal,
                         )
                         androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.width(with(density) { bookHinge.bounds.width().toDp() }))
                         liveScreen(androidx.compose.ui.Modifier.weight(1f).fillMaxHeight())
@@ -1412,6 +1414,7 @@ private fun androidx.compose.foundation.layout.BoxScope.WorkoutLayer(
             org.openstrap.app.ui.glow.GlowWorkoutReadyScreen(
                 sport, readyPicking, connection, live, padding,
                 recentSports = recentSports, sides = sides,
+                kcalTargets = profile?.let { org.openstrap.app.data.EnergyExpenditure.bmrPerMinute(it, it.age()) } != null,
                 onSide = { s, indoor ->
                     viewScope.launch {
                         container.settings.setWorkoutSide(s, indoor)

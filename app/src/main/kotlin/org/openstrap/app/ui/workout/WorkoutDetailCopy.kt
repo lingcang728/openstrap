@@ -5,6 +5,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.openstrap.app.data.WorkoutTarget
 import org.openstrap.app.data.Workouts
 import org.openstrap.app.ui.dashboard.Info
 import org.openstrap.app.ui.dashboard.TodayCopy
@@ -116,6 +117,21 @@ object WorkoutDetailCopy {
                 else WorkoutFact("Calories", "%,d".format(locale, total), "kcal")
             },
         )
+
+    /**
+     * A kcal target as a fact, after Calories: "300 kcal" with "Reached at 24:40" ([reachedSeconds]), "Reached" when it
+     * got there without a time, or "Not reached, 212 of 300" from [activeKcal]. Null for no target or another kind.
+     */
+    fun targetFact(target: String?, reachedSeconds: Long?, activeKcal: Int?, locale: Locale = Locale.getDefault()): WorkoutFact? {
+        val k = WorkoutTarget.parse(target) as? WorkoutTarget.Kcal ?: return null
+        val status = when {
+            reachedSeconds != null -> "Reached at ${workoutClock(reachedSeconds)}"
+            activeKcal != null && activeKcal >= k.kcal -> "Reached"
+            activeKcal != null -> "Not reached, %,d of %,d".format(locale, activeKcal, k.kcal)
+            else -> "Not reached"
+        }
+        return WorkoutFact("Target", "%,d kcal".format(locale, k.kcal), status)
+    }
 
     /**
      * The Load card's heart rate drop line: "Heart rate drop 34 bpm in the first minute, quick for you." Only after a

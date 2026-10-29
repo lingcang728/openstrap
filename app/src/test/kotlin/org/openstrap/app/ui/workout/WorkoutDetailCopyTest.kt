@@ -164,4 +164,17 @@ class WorkoutDetailCopyTest {
                 .let { s -> listOfNotNull(s.info.name, s.info.meaning, s.hereLine) + s.info.scale + s.rows.flatMap { listOf(it.first, it.second) } }
         lines.forEach { l -> listOf("·", ";", "—").forEach { assertFalse("$l has $it", l.contains(it)) } }
     }
+
+    @Test fun `a kcal target is a fact, reached at its time or not reached with how far it got`() {
+        assertEquals(WorkoutFact("Target", "300 kcal", "Reached at 24:40"), WorkoutDetailCopy.targetFact("k:300", 1480, 340, Locale.UK))
+        assertEquals(WorkoutFact("Target", "300 kcal", "Not reached, 212 of 300"), WorkoutDetailCopy.targetFact("k:300", null, 212, Locale.UK))
+        assertEquals(WorkoutFact("Target", "1,200 kcal", "Reached"), WorkoutDetailCopy.targetFact("k:1200", null, 1250, Locale.UK))
+        assertEquals("Not reached", WorkoutDetailCopy.targetFact("k:300", null, null, Locale.UK)!!.status)
+        // Other targets say nothing here.
+        assertNull(WorkoutDetailCopy.targetFact("t:1800", 1800, 400))
+        assertNull(WorkoutDetailCopy.targetFact(null, null, 400))
+        listOf(WorkoutDetailCopy.targetFact("k:300", 1480, 340)!!, WorkoutDetailCopy.targetFact("k:300", null, 212)!!)
+            .flatMap { listOfNotNull(it.name, it.value, it.status) }
+            .forEach { l -> listOf("·", ";", "—").forEach { b -> assertFalse("$l has $b", l.contains(b)) } }
+    }
 }

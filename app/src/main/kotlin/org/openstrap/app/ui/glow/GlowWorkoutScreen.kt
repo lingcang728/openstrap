@@ -118,7 +118,7 @@ fun GlowWorkoutDetailScreen(
                 shown.distanceMeters, shown.distanceFromSteps,
                 if (shown.fromPhone) (shown.durationSeconds - shown.activeSeconds).coerceAtLeast(0) else 0L, w.steps, w.calories,
                 activeKcal = activeKcal.takeIf { shown.fromPhone || bmrPerMinute != null },
-            )
+            ) + listOfNotNull(WorkoutDetailCopy.targetFact(shown.target, shown.targetReachedSeconds, shown.activeKcal?.roundToInt()))
             val factsShown = facts.isNotEmpty() || (phone?.route?.size ?: 0) >= 2
             if (factsShown) item { FactsList(facts, phone) }
             // The workout's share of its day, right under its kcal (calories spec 4.2).
@@ -293,7 +293,7 @@ private fun FactsList(facts: List<WorkoutFact>, summary: PhoneSummary?) {
         facts.forEachIndexed { i, f ->
             val color = when (f.name) {
                 "Paused" -> PausedColor
-                "Calories" -> MetricColors.calories
+                "Calories", "Target" -> MetricColors.calories
                 else -> MetricColors.steps
             }
             val icon = when (f.name) {
@@ -301,6 +301,7 @@ private fun FactsList(facts: List<WorkoutFact>, summary: PhoneSummary?) {
                 "Paused" -> AppIcons.Hourglass
                 "Steps" -> Metric.Steps.rowIcon()
                 "Calories" -> Score.Energy.rowIcon()
+                "Target" -> AppIcons.Target
                 else -> null
             }
             ListRow(f.name, color, f.value, f.status, divider = i > 0, icon = icon)

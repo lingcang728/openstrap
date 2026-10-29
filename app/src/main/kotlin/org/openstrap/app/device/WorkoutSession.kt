@@ -735,7 +735,7 @@ class WorkoutSession(
         // Waited for, so the calm down's own switch-off can't land after this workout turns the stream on.
         calmJob?.cancelAndJoin()
         calmJob = null
-        coach = org.openstrap.app.data.Coach(org.openstrap.app.data.WorkoutTarget.parse(w.target))
+        coach = org.openstrap.app.data.Coach(org.openstrap.app.data.WorkoutTarget.parse(w.target), w.targetReachedAt)
         strapSessions = runCatching { settings.strapSessions.first() }.getOrDefault(false)
         heightCm = runCatching { settings.profile.first().heightCm }.getOrNull()
         if (w.useGps) location.start()
@@ -823,6 +823,12 @@ class WorkoutSession(
                     r.workout, live, history, stepTotals, synced, resting, maxHr.toFloat(), profile, profile.age(date), vo2, t, _kcal.value,
                 )
             }.getOrDefault(_kcal.value)
+            // A kcal target buzzes once, the first time the figure reaches it; when is kept for the summary.
+            val active = _kcal.value?.active
+            if (active != null && !r.paused) coach.kcal(t, active)?.let { c ->
+                cue(c)
+                update { it.copy(targetReachedAt = t) }
+            }
             delay(KCAL_TICK_MS)
         }
     }

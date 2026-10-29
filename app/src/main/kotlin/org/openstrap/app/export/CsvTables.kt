@@ -197,13 +197,13 @@ val CSV_TABLES: List<CsvTable<*>> = listOf(
     // Workouts recorded on the phone; one still recording is left out until it ends.
     CsvTable("app_workout.csv",
         "start,start_epoch,end_epoch,sport_type,source,pauses,end_reason,avg_hr,max_hr,ask_to_end,recorded_end_epoch,shown_start_epoch,target," +
-            "use_gps,keep_route,distance_m,distance_from_steps,rest,sets_target,laps,epoc,aerobic_te,recovery_minutes,vo2max,active_kcal,total_kcal",
+            "use_gps,keep_route,distance_m,distance_from_steps,rest,sets_target,laps,epoc,aerobic_te,recovery_minutes,vo2max,active_kcal,total_kcal,target_reached_epoch",
         Key("app_workout", "start", "start_epoch", span = Span("`end`", "end_epoch")),
         { d, f, t -> d.appWorkoutsAll().filter { it.start in f..t } },
         {
             listOf(iso(it.start), it.start, it.end, it.sportType, it.source, it.pauses, it.endReason, it.averageHeartRate, it.maxHeartRate,
                 it.askToEnd, it.recordedEnd, it.shownStart, it.target, it.useGps, it.keepRoute, it.distanceMeters, it.distanceFromSteps,
-                it.rest, it.setsTarget, it.laps, it.epoc, it.aerobicTrainingEffect, it.recoveryMinutes, it.vo2max, it.activeKcal, it.totalKcal)
+                it.rest, it.setsTarget, it.laps, it.epoc, it.aerobicTrainingEffect, it.recoveryMinutes, it.vo2max, it.activeKcal, it.totalKcal, it.targetReachedAt)
         },
         {
             AppWorkout(it.long("start_epoch"), it.long("end_epoch"), it.int("sport_type"), it.intOrNull("source") ?: AppWorkout.SOURCE_APP,
@@ -215,7 +215,8 @@ val CSV_TABLES: List<CsvTable<*>> = listOf(
                 rest = if (it.has("rest")) it.string("rest") else null, setsTarget = it.intOrNull("sets_target"),
                 laps = if (it.has("laps")) it.string("laps") else "", epoc = it.floatOrNull("epoc"),
                 aerobicTrainingEffect = it.floatOrNull("aerobic_te"), recoveryMinutes = it.intOrNull("recovery_minutes"), vo2max = it.floatOrNull("vo2max"),
-                activeKcal = it.floatOrNull("active_kcal"), totalKcal = it.floatOrNull("total_kcal"))
+                activeKcal = it.floatOrNull("active_kcal"), totalKcal = it.floatOrNull("total_kcal"),
+                targetReachedAt = it.longOrNull("target_reached_epoch"))
         },
         { d, r -> d.insertAppWorkouts(r) }),
     CsvTable("app_workout_hr.csv", "workout_start_epoch,epoch,bpm,from_history",
