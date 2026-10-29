@@ -54,16 +54,17 @@ class WorkoutEffectEngine(private val dao: HealthDao) {
     }
 
     /**
-     * Works out and saves the kcal of a finished workout that has none yet (one from before version 20), without
-     * touching its effect. Nothing is written without a profile.
+     * Works out and saves the kcal of a finished workout that has none yet (one from before version 20), or [again]
+     * one that has, after the profile changed, without touching its effect. Nothing is written without a profile.
      */
-    suspend fun backfillKcal(w: AppWorkout, profile: UserProfile, zone: ZoneId = ZoneId.systemDefault()) {
+    suspend fun backfillKcal(w: AppWorkout, profile: UserProfile, zone: ZoneId = ZoneId.systemDefault(), again: Boolean = false) {
         val end = w.end ?: return
-        if (w.totalKcal != null) return
+        if (w.totalKcal != null && !again) return
         val engine = RecoveryEngine(dao)
         val date = Instant.ofEpochSecond(w.from).atZone(zone).toLocalDate()
+        // Worked out afresh, not fitted to the total saved with the profile before.
         val minutes = engine.phoneWorkoutKcal(
-            w, profile, profile.age(date), restingHr(w.from, zone), engine.maxHeartRate(profile, date, zone), engine.vo2max(profile, date, zone), end,
+            w.copy(activeKcal = null, totalKcal = null), profile, profile.age(date), restingHr(w.from, zone), engine.maxHeartRate(profile, date, zone), engine.vo2max(profile, date, zone), end,
         ) ?: return
         val kcal = WorkoutRecorder.kcal(minutes)
         dao.updateAppWorkoutKcal(w.start, kcal.active, kcal.total)

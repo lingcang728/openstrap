@@ -13,7 +13,8 @@ import java.time.ZoneId
  * The day shown in the app writes its own row each time [RecoveryEngine.compute] works it out ([HealthRepository]);
  * this fills the rest after a sync: days without a row (the first run backfills them all), the last [RECENT_DAYS] (a
  * sync can still bring their minutes or a workout), and every day when the profile has changed. Phone workouts from
- * before version 20 get their kcal first, so their days count it.
+ * before version 20 get their kcal first, so their days count it, and after a profile change every phone workout's
+ * kcal is worked out again first, so a day never fits its minutes to a total from the old profile.
  */
 class DailyEnergyHistory(private val dao: HealthDao) {
 
@@ -23,7 +24,10 @@ class DailyEnergyHistory(private val dao: HealthDao) {
     ): Int {
         if (EnergyExpenditure.bmrPerMinute(profile, profile.age()) == null) return 0
         val effects = WorkoutEffectEngine(dao)
-        for (w in dao.appWorkoutsAll()) if (w.end != null && w.totalKcal == null) runCatching { effects.backfillKcal(w, profile, zone) }
+        // A new profile moves every phone workout's kcal, and the days fit their minutes to it, so those go first.
+        for (w in dao.appWorkoutsAll()) if (w.end != null && (w.totalKcal == null || profileChanged)) {
+            runCatching { effects.backfillKcal(w, profile, zone, again = profileChanged) }
+        }
 
         val today = Instant.ofEpochSecond(now).atZone(zone).toLocalDate()
         val have = dao.dailyEnergyDaysOnce().toHashSet()
