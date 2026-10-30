@@ -482,7 +482,7 @@ private fun RecoverDetail(ctx: ActivityDetailContext) {
     val ended = source?.let { w -> Instant.ofEpochSecond(w.end).atZone(zone).let { ActivityCopy.ended(it.toLocalDate(), it.format(CLOCK), ctx.today) } }
     val headline = when {
         last == null -> DetailHeadline.none(tr(R.string.activity_detail_no_estimate), tr(R.string.activity_detail_after_a_workout_the))
-        shown?.first == null -> DetailHeadline.none(tr(R.string.common_recovered), "After your ${(source ?: last).sportName.lowercase()}, $ended")
+        shown?.first == null -> DetailHeadline.none(tr(R.string.common_recovered), tr(R.string.activity_detail_after_your, (source ?: last).sportName.lowercase(), ended))
         else -> DetailHeadline(shown.first!!, if (shown.first == "1") tr(R.string.activity_detail_hour_to_go) else tr(R.string.activity_detail_hours_to_go), shown.second)
     }
     val withData = rated.map { Instant.ofEpochSecond(it.end).atZone(zone).toLocalDate() }.toSet()
@@ -498,9 +498,9 @@ private fun RecoverDetail(ctx: ActivityDetailContext) {
                 rated.take(5).forEachIndexed { i, w ->
                     val start = Instant.ofEpochSecond(w.shownStart).atZone(zone)
                     // Its own, not what earlier workouts left on top ([SummaryCopy.carriedOver]).
-                    val own = org.openstrap.app.ui.workout.SummaryCopy.recoverSpan(w.ownRecoveryMinutes ?: w.recoveryMinutes) ?: "None"
+                    val own = org.openstrap.app.ui.workout.SummaryCopy.recoverSpan(w.ownRecoveryMinutes ?: w.recoveryMinutes) ?: tr(R.string.common_none)
                     ListRow(
-                        w.sportName, color, own, "On its own, ${start.format(DAY)}, ${start.format(CLOCK)}",
+                        w.sportName, color, own, tr(R.string.activity_detail_on_its_own, start.format(DAY), start.format(CLOCK)),
                         divider = i > 0, onClick = { ctx.onOpen(Detail.Workout(w.workout.start)) }, icon = org.openstrap.app.ui.workout.SportIcons.of(w.workout.sportType), iconTint = SportIconTint,
                     )
                 }
@@ -550,7 +550,7 @@ private fun CaloriesDetail(ctx: ActivityDetailContext) {
         range == Range.Day -> DetailHeadline("%,d".format(active), CaloriesCopy.dayLabel(ctx.isToday), tr(R.string.common_goal_met).takeIf { active >= goal })
         summary == null -> DetailHeadline.none(tr(R.string.common_loading), DetailCopy.noValue(Metric.Steps, range, ctx.isToday))
         summary.activeADay != null -> DetailHeadline("%,d".format(summary.activeADay), CaloriesCopy.rangeLabel(range), CaloriesCopy.goalDays(summary))
-        else -> DetailHeadline.none("No full days yet", DetailCopy.noValue(Metric.Steps, range, ctx.isToday))
+        else -> DetailHeadline.none(tr(R.string.activity_detail_no_full_days_yet), DetailCopy.noValue(Metric.Steps, range, ctx.isToday))
     }
     DetailTemplate(
         Score.Energy.title, color, siblings(Detail.OfScore(Score.Energy), ctx.onSwitch), onInfo = { info = true }, onBack = ctx.onBack,
@@ -559,7 +559,7 @@ private fun CaloriesDetail(ctx: ActivityDetailContext) {
     ) {
         if (e == null || active == null) {
             if (ctx.r != null) item {
-                ListPanel(Modifier.padding(top = 8.dp)) { LinkRow("Add age, weight and height", ctx.onEditProfile, divider = false) }
+                ListPanel(Modifier.padding(top = 8.dp)) { LinkRow(tr(R.string.activity_detail_add_age_weight_and), ctx.onEditProfile, divider = false) }
             }
         } else if (range == Range.Day) {
             item { GoalBar(CaloriesCopy.share(active, goal), CaloriesCopy.toGoal(active, goal), color) }
@@ -569,9 +569,9 @@ private fun CaloriesDetail(ctx: ActivityDetailContext) {
                     // So far today both are; the activity level only means something for a whole day, in the goal's place.
                     DetailFigures(
                         listOf(
-                            "%,d".format(Math.round(e.totalKcal)) to "Total kcal",
-                            "%,d".format(Math.round(e.totalKcal - e.activeKcal)) to "At rest",
-                            (e.pal?.takeIf { !ctx.isToday }?.let { "%.2f".format(it) to tr(R.string.activity_detail_activity_level) } ?: ("%,d".format(goal) to "Goal")),
+                            "%,d".format(Math.round(e.totalKcal)) to tr(R.string.activity_detail_total_kcal),
+                            "%,d".format(Math.round(e.totalKcal - e.activeKcal)) to tr(R.string.activity_detail_at_rest),
+                            (e.pal?.takeIf { !ctx.isToday }?.let { "%.2f".format(it) to tr(R.string.activity_detail_activity_level) } ?: ("%,d".format(goal) to tr(R.string.activity_detail_goal))),
                         ),
                     )
                     DetailSentence(ActivityCopy.energy(Math.round(e.bmrKcal)))
@@ -583,7 +583,7 @@ private fun CaloriesDetail(ctx: ActivityDetailContext) {
             item {
                 val zone = ZoneId.systemDefault()
                 val sources = remember(ctx.workouts, date, e) { CaloriesCopy.sources(ctx.workouts, date, e, e.bmrKcal / 1440f, zone) }
-                ListPanel(Modifier.padding(top = 8.dp), title = "Where it came from") {
+                ListPanel(Modifier.padding(top = 8.dp), title = tr(R.string.activity_detail_where_it_came_from)) {
                     sources.forEachIndexed { i, s ->
                         val start = s.workoutStart
                         if (start != null) ListRow(
@@ -600,7 +600,7 @@ private fun CaloriesDetail(ctx: ActivityDetailContext) {
             item {
                 when {
                     rows == null -> DetailEmpty(tr(R.string.common_loading))
-                    summary == null || rows.keys.none { it in start..date } -> DetailEmpty("No calories in this range yet.")
+                    summary == null || rows.keys.none { it in start..date } -> DetailEmpty(tr(R.string.activity_detail_no_calories_in_this))
                     else -> RangeKcal(rows, range, start, date, goal, color) { scrub = it }
                 }
             }
@@ -608,8 +608,8 @@ private fun CaloriesDetail(ctx: ActivityDetailContext) {
                 item {
                     DetailFigures(
                         listOfNotNull(
-                            "%,d".format(summary.activeTotal) to "Active kcal in all",
-                            summary.totalADay?.let { "%,d".format(it) to "Total a day" },
+                            "%,d".format(summary.activeTotal) to tr(R.string.activity_detail_active_kcal_in_all),
+                            summary.totalADay?.let { "%,d".format(it) to tr(R.string.activity_detail_total_a_day) },
                             summary.vsBefore?.let { CaloriesCopy.signed(it) to CaloriesCopy.vsLabel(range) },
                         ),
                         Modifier.padding(top = 18.dp),
@@ -654,9 +654,9 @@ private fun HourlyKcal(e: org.openstrap.app.data.EnergyExpenditure.Day, color: C
     val h = e.hourly
     val stacks = remember(h) { List(24) { listOf(h.workout[it], h.walking[it], h.everyday[it].coerceAtLeast(0f)) } }
     EdgeCard(color, Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        EdgeTitle("By the hour", CaloriesCopy.peak(h.total))
+        EdgeTitle(tr(R.string.activity_detail_by_the_hour), CaloriesCopy.peak(h.total))
         KcalBars(stacks, listOf(color, WalkingKcal, EverydayKcal), goal = null, labels = listOf("00", "06", "12", "18", "24"), spread = true, Modifier.padding(top = 16.dp), height = 120.dp, onPick = onPick)
-        KcalLegend(listOf("Workouts" to color, "Walking" to WalkingKcal, "Everyday" to EverydayKcal), Modifier.padding(top = 12.dp))
+        KcalLegend(listOf(tr(R.string.common_workouts) to color, tr(R.string.frame_walking) to WalkingKcal, tr(R.string.activity_detail_everyday) to EverydayKcal), Modifier.padding(top = 12.dp))
     }
 }
 
@@ -691,13 +691,13 @@ private fun RangeKcal(
             onPick = { i ->
                 onScrub(i?.let { bars[it] }?.let { (d, parts) ->
                     parts?.let {
-                        val label = if (range == Range.Year) "active kcal a day, week of ${d.format(DateTimeFormatter.ofPattern("d MMM"))}" else "active kcal, ${d.format(DAY)}"
+                        val label = if (range == Range.Year) tr(R.string.activity_detail_active_kcal_a_day, d.format(DateTimeFormatter.ofPattern("d MMM"))) else tr(R.string.activity_detail_active_kcal, d.format(DAY))
                         DetailHeadline("%,d".format(Math.round(it.sum())), label, null)
                     }
                 })
             },
         )
-        KcalLegend(listOf("Workouts" to color, "The rest" to WalkingKcal), Modifier.padding(top = 12.dp))
+        KcalLegend(listOf(tr(R.string.common_workouts) to color, tr(R.string.activity_detail_the_rest) to WalkingKcal), Modifier.padding(top = 12.dp))
     }
 }
 

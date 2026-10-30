@@ -14,6 +14,7 @@ import org.openstrap.app.ui.glow.km
 import org.openstrap.app.ui.glow.workoutClock
 import org.openstrap.app.R
 import org.openstrap.app.tr
+import org.openstrap.app.trRaw
 
 /*
  * What the page of a past workout says (spec 6.3, "Workout detail"): the sentence first ("Hard run, mostly in zone
@@ -115,7 +116,7 @@ object WorkoutDetailCopy {
             pausedSeconds.takeIf { it >= MIN_PAUSED_S }?.let { WorkoutFact(tr(R.string.common_paused), workoutClock(it), tr(R.string.workout_detail_copy_not_counted_in_the)) },
             steps?.takeIf { it > 0 }?.let { WorkoutFact(tr(R.string.common_steps), "%,d".format(locale, it), null) },
             calories?.takeIf { it > 0 }?.let { total ->
-                if (activeKcal != null && activeKcal != total) WorkoutFact(tr(R.string.common_calories), "%,d".format(locale, activeKcal), "Total %,d".format(locale, total))
+                if (activeKcal != null && activeKcal != total) WorkoutFact(tr(R.string.common_calories), "%,d".format(locale, activeKcal), trRaw(R.string.workout_detail_copy_total).format(locale, total))
                 else WorkoutFact(tr(R.string.common_calories), "%,d".format(locale, total), "kcal")
             },
         )
@@ -127,12 +128,12 @@ object WorkoutDetailCopy {
     fun targetFact(target: String?, reachedSeconds: Long?, activeKcal: Int?, locale: Locale = Locale.getDefault()): WorkoutFact? {
         val k = WorkoutTarget.parse(target) as? WorkoutTarget.Kcal ?: return null
         val status = when {
-            reachedSeconds != null -> "Reached at ${workoutClock(reachedSeconds)}"
-            activeKcal != null && activeKcal >= k.kcal -> "Reached"
-            activeKcal != null -> "Not reached, %,d of %,d".format(locale, activeKcal, k.kcal)
-            else -> "Not reached"
+            reachedSeconds != null -> tr(R.string.workout_detail_copy_reached_at, workoutClock(reachedSeconds))
+            activeKcal != null && activeKcal >= k.kcal -> tr(R.string.workout_detail_copy_reached)
+            activeKcal != null -> trRaw(R.string.workout_detail_copy_not_reached_of).format(locale, activeKcal, k.kcal)
+            else -> tr(R.string.workout_detail_copy_not_reached)
         }
-        return WorkoutFact("Target", "%,d kcal".format(locale, k.kcal), status)
+        return WorkoutFact("Target", trRaw(R.string.summary_copy_kcal).format(locale, k.kcal), status)
     }
 
     /**
@@ -170,15 +171,15 @@ object WorkoutDetailCopy {
      */
     private fun strapLine(strap: List<EffectFigures>): String {
         fun figures(s: EffectFigures) = listOfNotNull(
-            s.aerobic?.let { "aerobic ${one(it)}" }, s.anaerobic?.let { "anaerobic ${one(it)}" }, s.load?.let { "Load $it" },
-            SummaryCopy.recoverSpan(s.recoveryMinutes)?.let { "time to recover $it" },
+            s.aerobic?.let { "aerobic ${one(it)}" }, s.anaerobic?.let { "anaerobic ${one(it)}" }, s.load?.let { tr(R.string.workout_detail_copy_load, it) },
+            SummaryCopy.recoverSpan(s.recoveryMinutes)?.let { tr(R.string.workout_detail_copy_time_to_recover, it) },
         ).joinToString(", ")
         val each = strap.map { it to figures(it) }.filter { it.second.isNotEmpty() }
         return when {
             each.isEmpty() -> ""
-            strap.size == 1 -> " The strap recorded this workout too. Its own figures: ${each.single().second}."
-            else -> " The strap recorded it as ${strap.size} workouts of its own. " +
-                each.joinToString(" ") { (s, f) -> "From ${s.from ?: "its start"}: $f." }
+            strap.size == 1 -> " " + tr(R.string.workout_detail_copy_the_strap_recorded_this_2, each.single().second)
+            else -> " " + tr(R.string.workout_detail_copy_the_strap_recorded_it, strap.size) + " " +
+                each.joinToString(" ") { (s, f) -> tr(R.string.workout_detail_copy_from, s.from ?: tr(R.string.workout_detail_copy_its_start), f) }
         }
     }
 
@@ -205,8 +206,8 @@ object WorkoutDetailCopy {
                     listOfNotNull(aerobic?.let { tr(R.string.missed_aerobic, one(it)) }, anaerobic?.let { tr(R.string.missed_anaerobic, one(it)) }).joinToString(", ") + "."
             } else null,
             SummaryCopy.recoverSpan(recoveryMinutes)?.let {
-                tr(R.string.common_time_to_recover) to "How long until your body is ready for another hard workout, from the training effect " +
-                    "and how tired you've been lately. It never drops below what earlier workouts left. This workout: " +
+                tr(R.string.common_time_to_recover) to tr(R.string.workout_detail_copy_how_long_until_your_2) + " " +
+                    tr(R.string.workout_detail_copy_and_how_tired_youve) + " " +
                     (SummaryCopy.carriedOver(recoveryMinutes, ownRecoveryMinutes, sportType) ?: it) + "."
             },
             drop60?.let { d ->
@@ -217,10 +218,10 @@ object WorkoutDetailCopy {
                 }
                 tr(R.string.common_heart_rate_drop) to tr(R.string.workout_detail_copy_how_far_your_heart, value)
             },
-            vo2max?.let { tr(R.string.common_vo_max) to "The most oxygen your body can use, in ml per kg per minute, estimated from this workout: ${Math.round(it)}." },
+            vo2max?.let { tr(R.string.common_vo_max) to tr(R.string.workout_detail_copy_the_most_oxygen_your, Math.round(it)) },
             tr(R.string.workout_detail_copy_where_these_come_from) to (
                 when {
-                    effectFromStrap -> "From the strap, which recorded this workout alongside the phone and worked these out itself."
+                    effectFromStrap -> tr(R.string.workout_detail_copy_from_the_strap_which)
                     fromPhone -> tr(R.string.workout_detail_copy_worked_out_by_openstrap)
                     else -> tr(R.string.workout_detail_copy_from_the_strap_worked)
                 }

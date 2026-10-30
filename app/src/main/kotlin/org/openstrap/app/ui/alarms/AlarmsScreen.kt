@@ -211,24 +211,24 @@ private fun HeartAlertsPanel(state: AlarmsUiState, vm: AlarmsViewModel) {
                 PageMenuRow(
                     tr(R.string.alarms_screen_heart_rate_measuring), s.choices.orEmpty(), s.number?.toInt(), ::intervalLabel, { vm.setHrInterval(it) },
                     divider = divider(), enabled = !state.busy, quiet = off,
-                    note = if (alerts) null else "Heart rate alerts need Continuous or every minute.",
+                    note = if (alerts) null else tr(R.string.alarms_screen_heart_rate_alerts_need_2),
                 )
             }
             g[SettingsCodec.KEY_HIGH_HR_ALERT]?.let { s ->
                 PageMenuRow(
-                    tr(R.string.alarms_screen_high_heart_rate_alert), s.choices.orEmpty(), s.number?.toInt(), { if (it == 0) tr(R.string.common_off) else "Above $it" },
+                    tr(R.string.alarms_screen_high_heart_rate_alert), s.choices.orEmpty(), s.number?.toInt(), { if (it == 0) tr(R.string.common_off) else tr(R.string.alarms_screen_above, it) },
                     { vm.setEnum(SettingsCodec.KEY_HIGH_HR_ALERT, it) }, divider = divider(), enabled = !state.busy && alerts, quiet = off,
                 )
             }
             g[SettingsCodec.KEY_LOW_HR_ALERT]?.let { s ->
                 PageMenuRow(
-                    tr(R.string.alarms_screen_low_heart_rate_alert), s.choices.orEmpty(), s.number?.toInt(), { if (it == 0) tr(R.string.common_off) else "Below $it" },
+                    tr(R.string.alarms_screen_low_heart_rate_alert), s.choices.orEmpty(), s.number?.toInt(), { if (it == 0) tr(R.string.common_off) else tr(R.string.alarms_screen_below, it) },
                     { vm.setEnum(SettingsCodec.KEY_LOW_HR_ALERT, it) }, divider = divider(), enabled = !state.busy && alerts, quiet = off,
                 )
             }
             g[SettingsCodec.KEY_LOW_SPO2_ALERT]?.let { s ->
                 PageMenuRow(
-                    tr(R.string.alarms_screen_low_blood_oxygen_alert), s.choices.orEmpty(), s.number?.toInt(), { if (it == 0) tr(R.string.common_off) else "Below $it%" },
+                    tr(R.string.alarms_screen_low_blood_oxygen_alert), s.choices.orEmpty(), s.number?.toInt(), { if (it == 0) tr(R.string.common_off) else tr(R.string.alarms_screen_below_4, it) },
                     { vm.setEnum(SettingsCodec.KEY_LOW_SPO2_ALERT, it) }, divider = divider(), enabled = !state.busy, quiet = off,
                 )
             }

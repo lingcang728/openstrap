@@ -155,7 +155,7 @@ class HistorySync(
             log("history failed: $e")
             // A wrapped system error's message is just its class name (android.os.DeadObjectException), not for the card.
             // Whatever a call on a dropped link threw (a missing characteristic, a closed op), the cause is the link.
-            val reason = if (!gatt.connected.value) "The link to the strap dropped." else e.message?.takeUnless { e.cause != null && it == e.cause.toString() }
+            val reason = if (!gatt.connected.value) tr(R.string.history_sync_the_link_to_the) else e.message?.takeUnless { e.cause != null && it == e.cause.toString() }
             state.value = SyncState.Failed(reason ?: tr(R.string.history_sync_sync_failed))
         } finally {
             listeners.cancel()

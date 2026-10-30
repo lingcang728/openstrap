@@ -332,7 +332,7 @@ fun <T> PageMenuRow(
         Box(Modifier.fillMaxWidth()) {
             Row(
                 Modifier.fillMaxWidth()
-                    .clickable(enabled = enabled, onClickLabel = "Change", role = Role.DropdownList) { open = true }
+                    .clickable(enabled = enabled, onClickLabel = tr(R.string.page_parts_change), role = Role.DropdownList) { open = true }
                     .alpha(if (enabled) 1f else 0.45f)
                     .padding(vertical = GlowLayout.RowPadding),
                 verticalAlignment = Alignment.CenterVertically,

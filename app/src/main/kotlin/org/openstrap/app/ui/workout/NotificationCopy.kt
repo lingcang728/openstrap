@@ -80,8 +80,8 @@ object NotificationCopy {
                 val inTarget = zoneSeconds.withIndex().filter { it.index in target.low..target.high }.sumOf { it.value }
                 tr(R.string.notification_copy_min_in, inTarget / 60, target.label)
             }
-            target is WorkoutTarget.Time -> "Goal ${target.label}"
-            target is WorkoutTarget.Kcal -> "Goal ${target.label}"
+            target is WorkoutTarget.Time -> tr(R.string.notification_copy_goal, target.label)
+            target is WorkoutTarget.Kcal -> tr(R.string.notification_copy_goal, target.label)
             zone != null -> WorkoutCopy.zoneTime(zoneSeconds.getOrElse(zone) { 0 })
             else -> null
         }

@@ -390,7 +390,7 @@ internal fun ActivityCard(
         // already climbs toward the goal, and the sentence gives the share.
         progress = if (chart || goal <= 0) null else state.steps / goal.toFloat(), onClick = onClick,
     ) {
-        EdgeTitle(tr(R.string.common_steps), "Goal %,d".format(goal), marker = upTo, tag = tag)
+        EdgeTitle(tr(R.string.common_steps), tr(R.string.today_cards_goal, goal), marker = upTo, tag = tag)
         val sentence = org.openstrap.app.ui.dashboard.ActivityCopy.activityLine(state.steps, goal, pace, isToday)
         if (count) EdgeValue("%,d".format(state.steps), tr(R.string.missed_unit_steps), sentence)
         else Text(sentence, color = Color.White, style = GlowType.body, modifier = Modifier.padding(top = 10.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)

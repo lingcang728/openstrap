@@ -1173,7 +1173,7 @@ private fun WorkoutHeartCard(
                 zone?.let { Note(WorkoutCopy.zoneTime(zoneSeconds[it])) }
                 Spacer(Modifier.weight(1f))
                 when (val t = WorkoutTarget.parse(r.workout.target)) {
-                    is WorkoutTarget.Zones -> Note("Target ${t.label.removePrefix("Zone ")}, the strap buzzes if you drift")
+                    is WorkoutTarget.Zones -> Note(tr(R.string.glow_workout_mode_target_the_strap_buzzes_3, t.label.removePrefix("Zone ")))
                     is WorkoutTarget.Time -> Note("${workoutClock(active)} of ${t.label}")
                     is WorkoutTarget.Kcal -> Note(WorkoutCopy.kcalProgress(kcal, t))
                     null -> Unit
@@ -1313,19 +1313,19 @@ private fun SideStat(
 ) {
     val distance = r.workout.distanceMeters
     val (label, value) = when (figure) {
-        SideFigure.Avg -> "Avg" to stats?.average?.toString()
-        SideFigure.Max -> "Max" to stats?.max?.toString()
+        SideFigure.Avg -> tr(R.string.glow_workout_mode_avg) to stats?.average?.toString()
+        SideFigure.Max -> tr(R.string.common_max) to stats?.max?.toString()
         SideFigure.Kcal -> "kcal" to kcal?.active?.toInt()?.toString()
-        SideFigure.Distance -> (if (r.workout.distanceFromSteps) "Distance ≈" else "Distance") +
+        SideFigure.Distance -> (if (r.workout.distanceFromSteps) tr(R.string.glow_workout_mode_distance) else tr(R.string.common_distance)) +
             (if (distance != null && distance >= 1000) " km" else "") to distance?.let(::km)
-        SideFigure.Pace -> "Pace /km" to Route.formatPace(Route.currentPace(route))
+        SideFigure.Pace -> tr(R.string.glow_workout_mode_pace_km) to Route.formatPace(Route.currentPace(route))
     }
     val spoken = when (figure) {
-        SideFigure.Avg -> "Average heart rate"
-        SideFigure.Max -> "Peak heart rate"
-        SideFigure.Kcal -> "Active kcal"
-        SideFigure.Distance -> if (r.workout.distanceFromSteps) "Distance from steps" else "Distance"
-        SideFigure.Pace -> "Pace per kilometre"
+        SideFigure.Avg -> tr(R.string.sleep_panels_average_heart_rate)
+        SideFigure.Max -> tr(R.string.glow_workout_mode_peak_heart_rate)
+        SideFigure.Kcal -> tr(R.string.glow_workout_mode_active_kcal)
+        SideFigure.Distance -> if (r.workout.distanceFromSteps) tr(R.string.glow_workout_mode_distance_from_steps) else tr(R.string.common_distance)
+        SideFigure.Pace -> tr(R.string.glow_workout_mode_pace_per_kilometre)
     }
     val unit = if (figure == SideFigure.Distance && distance != null && distance >= 1000) " kilometres" else ""
     LiveStat(

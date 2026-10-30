@@ -219,7 +219,7 @@ object TodayCopy {
                 1 -> tr(R.string.missed_a_workout, workouts[0] ?: tr(R.string.frame_after_your__workout))
                 else -> tr(R.string.missed_n_workouts, workouts.size)
             },
-            if (stepCount || stepGoal <= 0) "%,d steps".format(locale, steps) else stepsAgainstGoal(steps, stepGoal),
+            if (stepCount || stepGoal <= 0) trRaw(R.string.today_copy_steps_2).format(locale, steps) else stepsAgainstGoal(steps, stepGoal),
             when (load) {
                 LoadStatus.Above -> tr(R.string.today_copy_a_load_above_your)
                 LoadStatus.Below -> tr(R.string.today_copy_a_load_below_your)
@@ -233,10 +233,10 @@ object TodayCopy {
 
     /** The day's [steps] against the [goal] in words: under half is well short, from 80% close, the goal itself past. */
     fun stepsAgainstGoal(steps: Int, goal: Int): String = when {
-        steps >= goal -> "past your step goal"
-        steps >= goal * 0.8 -> "close to your step goal"
-        steps >= goal / 2 -> "short of your step goal"
-        else -> "well short of your step goal"
+        steps >= goal -> tr(R.string.today_copy_past_your_step_goal)
+        steps >= goal * 0.8 -> tr(R.string.today_copy_close_to_your_step)
+        steps >= goal / 2 -> tr(R.string.today_copy_short_of_your_step)
+        else -> tr(R.string.today_copy_well_short_of_your)
     }
 
     /** "Bedtime in 1 h 10" until your usual [bedtime], read on a clock that starts at noon; null once it's passed. */

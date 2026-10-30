@@ -259,11 +259,11 @@ private fun NightLines(state: DayUiState, window: LongRange, onScrub: (DetailHea
     var breathAt by remember(window) { mutableStateOf<DetailHeadline?>(null) }
     Column {
         if (hr.isNotEmpty()) {
-            ChartTitle(tr(R.string.common_heart_rate), "Lowest ${hr.minOf { it.y }.toInt()}, average ${hr.map { it.y }.average().toInt()} bpm", scrubbed = hrAt)
+            ChartTitle(tr(R.string.common_heart_rate), tr(R.string.sleep_detail_lowest_average_bpm, hr.minOf { it.y }.toInt(), hr.map { it.y }.average().toInt()), scrubbed = hrAt)
             ScrubLine(hr, window, 130.dp, labels, MetricColors.heart, "bpm") { hrAt = it; onScrub(it) }
         }
         if (breath.isNotEmpty()) {
-            ChartTitle(tr(R.string.common_breathing_rate), "Average %.1f br/min".format(breath.map { it.y }.average()), scrubbed = breathAt)
+            ChartTitle(tr(R.string.common_breathing_rate), tr(R.string.sleep_detail_average_br_min, breath.map { it.y }.average()), scrubbed = breathAt)
             ScrubLine(breath, window, 100.dp, labels, MetricColors.sleepLight, tr(R.string.missed_unit_br_min), decimals = 1) { breathAt = it; onScrub(it) }
         }
     }
@@ -406,9 +406,9 @@ internal fun NapsDetail(
                         val detected = state.napsAsDetected[nap.start]
                         if (detected != null) {
                             if (detected.start != nap.start || detected.end != nap.end) {
-                                Caption("Your times. The strap saw ${clock(detected.start)}–${clock(detected.end)}.")
+                                Caption(tr(R.string.sleep_detail_your_times_the_strap, clock(detected.start), clock(detected.end)))
                             }
-                            PageButton("Adjust times", { adjusting = nap.start }, Modifier.padding(top = 4.dp, bottom = 14.dp), icon = AppIcons.PencilEdit)
+                            PageButton(tr(R.string.sleep_detail_adjust_times), { adjusting = nap.start }, Modifier.padding(top = 4.dp, bottom = 14.dp), icon = AppIcons.PencilEdit)
                         }
                         val stages = state.napStages[nap.start].orEmpty()
                         if (stages.isEmpty()) Caption(SleepCopy.NAP_NO_STAGES)
@@ -470,26 +470,26 @@ private fun NapTimesSheet(nap: SleepSession, detected: SleepSession, heartRate: 
     val window = (detected.start - 3600)..(detected.end + 3600)
     val hr = heartRate.filter { it.x in window }
 
-    PageSheet(onDismiss, "Nap times", note = "The strap saw ${clock(detected.start)}–${clock(detected.end)}.") {
+    PageSheet(onDismiss, tr(R.string.sleep_detail_nap_times), note = tr(R.string.sleep_detail_the_strap_saw, clock(detected.start), clock(detected.end))) {
         if (hr.isNotEmpty()) Column {
             Text(
-                scrub?.let { "${it.value} ${it.label}" } ?: "Heart rate around the nap. It drops as you fall asleep.",
+                scrub?.let { "${it.value} ${it.label}" } ?: tr(R.string.sleep_detail_heart_rate_around_the),
                 color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary, maxLines = 1,
             )
             Box(Modifier.padding(top = 8.dp)) {
                 ScrubLine(hr, window, 90.dp, listOf(clock(window.first), clock(window.last)), MetricColors.heart, "bpm") { scrub = it }
             }
         }
-        GlowSegments(listOf("Fell asleep ${clock(start)}", "Woke up ${clock(end)}"), if (pickingEnd) 1 else 0, { pickingEnd = it == 1 })
+        GlowSegments(listOf(tr(R.string.sleep_detail_fell_asleep, clock(start)), tr(R.string.sleep_detail_woke_up, clock(end))), if (pickingEnd) 1 else 0, { pickingEnd = it == 1 })
         TimePicker(if (pickingEnd) endClock else startClock, Modifier.align(Alignment.CenterHorizontally), colors = AlarmClockColors())
         if (problem != null) PageNote(problem, color = MetricColors.warn)
-        else Text("A nap of ${TodayCopy.duration(end - start)}.", color = Color.White, style = GlowType.body)
+        else Text(tr(R.string.sleep_detail_a_nap_of, TodayCopy.duration(end - start)), color = Color.White, style = GlowType.body)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            PageButton("Cancel", onDismiss, Modifier.weight(1f))
-            PageButton("Save", { onSave(start, end) }, Modifier.weight(1f), enabled = problem == null, primary = true)
+            PageButton(tr(R.string.common_cancel), onDismiss, Modifier.weight(1f))
+            PageButton(tr(R.string.common_save), { onSave(start, end) }, Modifier.weight(1f), enabled = problem == null, primary = true)
         }
         if (nap.start != detected.start || nap.end != detected.end) {
-            PageTextButton("Use the strap's times", { onSave(detected.start, detected.end) }, Modifier.align(Alignment.CenterHorizontally))
+            PageTextButton(tr(R.string.sleep_detail_use_the_straps_times), { onSave(detected.start, detected.end) }, Modifier.align(Alignment.CenterHorizontally))
         }
     }
 }

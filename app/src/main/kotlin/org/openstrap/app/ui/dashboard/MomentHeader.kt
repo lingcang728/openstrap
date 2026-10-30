@@ -84,7 +84,7 @@ fun MomentHeader(
             // You and the Strap page grow out of the button tapped (spec 3.5).
             start = {
                 growClick(onOpenYou).let { g ->
-                    RoundButton(AppIcons.User, if (updateWaiting) "You, a new version is ready" else tr(R.string.common_you), tr(R.string.moment_header_open_you), g.onClick, g.modifier, dot = updateWaiting)
+                    RoundButton(AppIcons.User, if (updateWaiting) tr(R.string.moment_header_you_a_new_version) else tr(R.string.common_you), tr(R.string.moment_header_open_you), g.onClick, g.modifier, dot = updateWaiting)
                 }
             },
             centre = { DaySwitcher(title, date, hasNext, onPrev, onNext, { calendarOpen = true }, Modifier) },

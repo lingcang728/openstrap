@@ -283,7 +283,7 @@ private fun ZoneHeartLine(
 @Composable
 private fun InYourDayCard(text: String, onOpen: (() -> Unit)?) {
     EdgeCard(MetricColors.calories, Modifier.fillMaxWidth(), kind = EdgeKind.Earlier, onClick = onOpen) {
-        EdgeTitle("In your day", null)
+        EdgeTitle(tr(R.string.glow_workout_screen_in_your_day), null)
         Text(text, color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary, modifier = Modifier.padding(top = 8.dp))
     }
 }

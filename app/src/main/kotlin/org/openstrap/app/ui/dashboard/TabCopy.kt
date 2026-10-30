@@ -353,7 +353,8 @@ object TabCopy {
         tr(R.string.tab_copy_first_estimate) + sunday.format(DateTimeFormatter.ofPattern("EEEE d MMM", locale))
 
     /** Habit Age before its first estimate, under your own age in its place: "Your age for now", then what it waits for. */
-    fun habitAgeForNow(waiting: String?): String = if (waiting.isNullOrBlank()) "Your age for now" else "Your age for now. $waiting"
+    fun habitAgeForNow(waiting: String?): String =
+        if (waiting.isNullOrBlank()) tr(R.string.tab_copy_your_age_for_now) else tr(R.string.tab_copy_your_age_for_now_2, waiting)
 
     /** Habit Age's one status line, and whether the number moved, which alone takes the orchid. */
     data class HabitAgeLine(val text: String, val moved: Boolean)

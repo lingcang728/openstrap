@@ -153,7 +153,7 @@ class DeviceViewModel(private val container: AppContainer) : ViewModel() {
                 runCatching { container.settings.restoreValues(org.openstrap.app.export.SettingsBackup.fromJson(json)) }.getOrDefault(0)
             } ?: 0
             BackupCopy.restored(result.total, settings > 0, result.skipped)
-        }.getOrElse { "Couldn't restore the copy: ${it.message}" }
+        }.getOrElse { tr(R.string.device_view_model_couldnt_restore_the_copy, it.message) }
     }
 
     val backup: StateFlow<org.openstrap.app.data.settings.BackupState> = container.settings.backup
@@ -172,7 +172,7 @@ class DeviceViewModel(private val container: AppContainer) : ViewModel() {
         val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         val kept = runCatching { resolver.takePersistableUriPermission(uri, flags) }
         if (kept.isFailure) {
-            _message.value = "OpenStrap can't keep writing to that folder. Choose another one."
+            _message.value = tr(R.string.device_view_model_openstrap_cant_keep_writing)
             return@launch
         }
         val before = backup.value.folder
@@ -221,8 +221,8 @@ class DeviceViewModel(private val container: AppContainer) : ViewModel() {
             val now = System.currentTimeMillis() / 1000
             val n = container.healthConnect.export(now - 30L * 24 * 3600, now)
             container.settings.setHealthConnectSynced(now)
-            "Wrote $n records to Health Connect (last 30 days)."
-        }.getOrElse { "Couldn't write to Health Connect: ${it.message}" }
+            tr(R.string.device_view_model_wrote_records_to_health, n)
+        }.getOrElse { tr(R.string.device_view_model_couldnt_write_to_health, it.message) }
     }
 
     /** Auto sync to Health Connect, for the You page's row. */
@@ -234,8 +234,8 @@ class DeviceViewModel(private val container: AppContainer) : ViewModel() {
         if (!on) { container.settings.setHealthConnectAuto(false); return@launch }
         _message.value = runCatching {
             val n = container.autoHealthConnect.turnOn()
-            "Auto sync is on. Wrote $n records to Health Connect (last 30 days)."
-        }.getOrElse { "Auto sync is on, but the first copy didn't work: ${it.message}" }
+            tr(R.string.device_view_model_auto_sync_is_on, n)
+        }.getOrElse { tr(R.string.device_view_model_auto_sync_is_on_2, it.message) }
     }
 
     /** The You page opened: auto sync turns off, saying why, if Health Connect or its permissions went away. */

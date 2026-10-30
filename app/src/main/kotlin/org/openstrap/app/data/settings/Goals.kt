@@ -18,8 +18,8 @@ data class Goals(
     fun summary(): String {
         val h = sleepMinutes / 60
         val m = sleepMinutes % 60
-        val sleep = if (m == 0) "$h h" else "$h h $m min"
-        return "%,d steps, %,d active kcal, %s sleep, %d active hours".format(steps, calories, sleep, activeHours)
+        val sleep = if (m == 0) tr(R.string.goals_hours_only, h) else tr(R.string.goals_h_min, h, m)
+        return trRaw(R.string.goals_steps_active_kcal_sleep).format(steps, calories, sleep, activeHours)
     }
 
     companion object {

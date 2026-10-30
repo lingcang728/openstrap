@@ -628,7 +628,7 @@ private fun EveningHero(ctx: TodayContext, lightAngle: Float?, bedtime: LocalTim
             // hidden in Edit Today does Energy come back here, last and full width, never a lone dash.
             val energy = ctx.charge?.takeIf { energyHidden }
             if (energy != null) Text(
-                "Energy $energy left", color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary,
+                tr(R.string.glow_today_screen_energy_left, energy), color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary,
                 maxLines = 1, modifier = Modifier.padding(top = 10.dp),
             )
         }

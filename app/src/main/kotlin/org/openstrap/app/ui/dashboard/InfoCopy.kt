@@ -231,17 +231,11 @@ object InfoCopy {
         )
         Score.Energy -> Info(
             tr(R.string.common_calories),
-            "Active kcal are what moving burned on top of your body's use at rest. The total adds that rest. Both are estimates, in kilocalories (kcal).",
+            tr(R.string.info_copy_active_kcal_are_what),
             emptyList(),
-            how = "Your body's use at rest comes from your weight, height, age and sex (Mifflin-St Jeor). On top of it " +
-                "come your steps each minute and, for effort without steps, your heart rate. A workout recorded in " +
-                "OpenStrap counts its own minutes from your heart rate and steps, the same figure its page shows. A " +
-                "strap workout uses the strap's kcal. Sleep counts at a little under resting. Active is the total less " +
-                "your use at rest for each minute worn, never below zero, so sleep takes nothing away. Your goal is in " +
-                "active kcal, as the strap's is.",
+            how = tr(R.string.info_copy_your_bodys_use_at),
             moves = tr(R.string.info_copy_moving_more_raises_it),
-            off = "Food digestion isn't included. It only covers the minutes the strap was worn, so a day with it off " +
-                "for hours reads low. A profile out of date throws the resting part.",
+            off = tr(R.string.info_copy_food_digestion_isnt_included),
         )
         Score.Distance -> Info(
             tr(R.string.common_distance),

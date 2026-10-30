@@ -373,7 +373,7 @@ private enum class Page(
     /** The row on the You or Strap page that opens this page, marked while it's open beside the list on a wide screen. */
     val row: String? = null,
 ) {
-    You, Profile(tr(R.string.common_profile)), HealthConnect(tr(R.string.you_page_health_connect)), Backup("Backup"), Updates(tr(R.string.firmware_screen_updates)), Diagnostics(tr(R.string.common_diagnostics)),
+    You, Profile(tr(R.string.common_profile)), HealthConnect(tr(R.string.you_page_health_connect)), Backup(tr(R.string.main_activity_backup)), Updates(tr(R.string.firmware_screen_updates)), Diagnostics(tr(R.string.common_diagnostics)),
     Strap, Alarms(tr(R.string.common_alarms)), PhoneAlerts(tr(R.string.common_phone_alerts)), HealthAlerts(tr(R.string.common_health_alerts)), Firmware(tr(R.string.common_firmware)), ZeppAccount(tr(R.string.common_zepp_account)),
 }
 
@@ -1135,7 +1135,7 @@ private fun AppRoot(
                                         onRestore = importHealthConnect,
                                         onOpen = {
                                             if (!org.openstrap.app.ui.device.openHealthConnect(context)) {
-                                                Toast.makeText(context, "Health Connect isn't available on this phone.", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, tr(R.string.main_activity_health_connect_isn_t), Toast.LENGTH_LONG).show()
                                             }
                                         },
                                         onBack = onBack,

@@ -340,7 +340,7 @@ private fun StrapHero(name: String, connection: ConnectionState, sync: SyncState
                 // The card's one dotted number (spec 2.3); the word after it sits on the digits' baseline in Body at 72%.
                 if (battery != null) Row(verticalAlignment = Alignment.Bottom) {
                     DotMatrixText("$battery", dot = org.openstrap.app.ui.glow.DotSize.Hero)
-                    Text("% battery", color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.body, modifier = Modifier.padding(start = 8.dp))
+                    Text(tr(R.string.device_screen_battery), color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.body, modifier = Modifier.padding(start = 8.dp))
                 }
                 if (sync is SyncState.Running) {
                     PageProgress()
@@ -350,15 +350,14 @@ private fun StrapHero(name: String, connection: ConnectionState, sync: SyncState
                     connection is ConnectionState.Failed && !connection.keyRejected -> {
                         Text(connection.reason, color = MetricColors.warn, style = GlowType.secondary)
                         Text(
-                            "OpenStrap keeps retrying. Keep the strap on its charger near the phone, and make sure the Zepp app " +
-                                "isn't running. The strap talks to one app at a time.",
+                            tr(R.string.device_screen_openstrap_keeps_retrying_keep),
                             style = GlowType.secondary, color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA),
                         )
                     }
                     sync is SyncState.Failed -> {
-                        Text("Sync stopped. ${sync.reason}", color = MetricColors.warn, style = GlowType.secondary)
+                        Text(tr(R.string.device_screen_sync_stopped, sync.reason), color = MetricColors.warn, style = GlowType.secondary)
                         Text(
-                            "$DATA_ON_STRAP OpenStrap tries again by itself.",
+                            tr(R.string.device_screen_openstrap_tries_again_by, DATA_ON_STRAP),
                             style = GlowType.secondary, color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA),
                         )
                     }

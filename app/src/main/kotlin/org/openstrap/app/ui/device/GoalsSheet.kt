@@ -110,12 +110,12 @@ private fun CalorieGoalField(value: Int, onChange: (Int) -> Unit, suggested: Int
         if (typed != null) onChange(typed)
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("Calories", color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary)
+        Text(tr(R.string.common_calories), color = Color.White.copy(alpha = GlowType.SECONDARY_ALPHA), style = GlowType.secondary)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RoundButton(AppIcons.Minus, "Lower the calorie goal", { typing = false; refused = false; onChange(CalorieGoal.step(value, -Goals.CALORIES_STEP)) }, size = 44.dp)
+            RoundButton(AppIcons.Minus, tr(R.string.goals_sheet_lower_the_calorie_goal), { typing = false; refused = false; onChange(CalorieGoal.step(value, -Goals.CALORIES_STEP)) }, size = 44.dp)
             Box(
                 Modifier.weight(1f).height(52.dp).clip(GlowLayout.TileShape).background(ControlSurface)
-                    .let { if (typing) it else it.clickable(onClickLabel = "Type the calorie goal", role = Role.Button) { text = value.toString(); refused = false; typing = true } },
+                    .let { if (typing) it else it.clickable(onClickLabel = tr(R.string.goals_sheet_type_the_calorie_goal), role = Role.Button) { text = value.toString(); refused = false; typing = true } },
                 contentAlignment = Alignment.Center,
             ) {
                 if (typing) {
@@ -129,18 +129,18 @@ private fun CalorieGoalField(value: Int, onChange: (Int) -> Unit, suggested: Int
                     )
                     LaunchedEffect(Unit) { focus.requestFocus() }
                 } else {
-                    Text("%,d active kcal".format(value), color = Color.White, style = GlowType.body, maxLines = 1)
+                    Text(tr(R.string.goals_sheet_active_kcal, value), color = Color.White, style = GlowType.body, maxLines = 1)
                 }
             }
-            RoundButton(AppIcons.Plus, "Raise the calorie goal", { typing = false; refused = false; onChange(CalorieGoal.step(value, Goals.CALORIES_STEP)) }, size = 44.dp)
+            RoundButton(AppIcons.Plus, tr(R.string.goals_sheet_raise_the_calorie_goal), { typing = false; refused = false; onChange(CalorieGoal.step(value, Goals.CALORIES_STEP)) }, size = 44.dp)
         }
         if (refused) PageNote(CalorieGoal.OUT_OF_RANGE, MetricColors.warn)
         if (suggested != null) {
-            val line = "Suggested %,d, from your last 4 weeks".format(suggested)
-            if (suggested == value) PageNote("$line. Your strap's goal is set to match.")
+            val line = tr(R.string.goals_sheet_suggested_from_your_last, suggested)
+            if (suggested == value) PageNote(tr(R.string.goals_sheet_your_straps_goal_is, line))
             else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(Modifier.weight(1f)) { PageNote(line) }
-                PageButton("Use", { typing = false; refused = false; onChange(suggested) })
+                PageButton(tr(R.string.goals_sheet_use), { typing = false; refused = false; onChange(suggested) })
             }
         }
     }

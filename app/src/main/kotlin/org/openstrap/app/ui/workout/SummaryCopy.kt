@@ -13,6 +13,7 @@ import org.openstrap.app.ui.glow.km
 import org.openstrap.app.ui.glow.workoutClock
 import org.openstrap.app.R
 import org.openstrap.app.tr
+import org.openstrap.app.trRaw
 
 /*
  * What the summary right after a workout says (spec 6.3, "Right after"): the heart rate drop as it happens and how it
@@ -109,7 +110,7 @@ object SummaryCopy {
      */
     fun timeToRecover(minutes: Int?, own: Int? = null, sportType: Int? = null): String? {
         val total = recoverSpan(minutes) ?: return null
-        return carriedOver(minutes, own, sportType)?.let { "Time to recover $it" } ?: "Time to recover $total"
+        return carriedOver(minutes, own, sportType)?.let { tr(R.string.summary_copy_time_to_recover, it) } ?: tr(R.string.summary_copy_time_to_recover, total)
     }
 
     /**
@@ -120,8 +121,8 @@ object SummaryCopy {
         if (minutes == null || own == null || minutes - own < CARRIED_SHOWN_MIN) return null
         val total = recoverSpan(minutes) ?: return null
         val noun = "this ${sportType?.let(::sportNoun) ?: tr(R.string.missed_unit_workout)}"
-        return recoverSpan(own)?.let { "$it from $noun, $total in all with what's left from earlier" }
-            ?: "nothing from $noun, $total left from earlier"
+        return recoverSpan(own)?.let { tr(R.string.summary_copy_from_in_all_with, it, noun, total) }
+            ?: tr(R.string.summary_copy_nothing_from_left_from, noun, total)
     }
 
     /** What earlier workouts left must run this far past a workout's own recovery before the line names both. */
@@ -149,8 +150,8 @@ object SummaryCopy {
     /** The workout card's calories, active first (calories spec 4.2): "486 active kcal, total 612"; null without them. */
     fun kcalLine(active: Int?, total: Int?, locale: java.util.Locale = java.util.Locale.getDefault()): String? = when {
         total == null || total <= 0 -> null
-        active == null || active == total -> "%,d kcal".format(locale, total)
-        else -> "%,d active kcal, total %,d".format(locale, active, total)
+        active == null || active == total -> trRaw(R.string.summary_copy_kcal).format(locale, total)
+        else -> trRaw(R.string.summary_copy_active_kcal_total).format(locale, active, total)
     }
 
     /**
@@ -162,10 +163,10 @@ object SummaryCopy {
         val k = WorkoutTarget.parse(target) as? WorkoutTarget.Kcal ?: return null
         val goal = "%,d".format(locale, k.kcal)
         return when {
-            reachedSeconds != null -> "Target $goal kcal, reached at ${workoutClock(reachedSeconds)}"
-            activeKcal != null && activeKcal >= k.kcal -> "Target $goal kcal, reached"
-            activeKcal != null -> "Target not reached, %,d of $goal kcal".format(locale, activeKcal)
-            else -> "Target $goal kcal, not reached"
+            reachedSeconds != null -> tr(R.string.summary_copy_target_kcal_reached_at, goal, workoutClock(reachedSeconds))
+            activeKcal != null && activeKcal >= k.kcal -> tr(R.string.summary_copy_target_kcal_reached, goal)
+            activeKcal != null -> trRaw(R.string.summary_copy_target_not_reached_of).format(locale, activeKcal, goal)
+            else -> tr(R.string.summary_copy_target_kcal_not_reached, goal)
         }
     }
 

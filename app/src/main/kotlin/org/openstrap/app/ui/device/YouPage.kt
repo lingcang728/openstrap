@@ -32,7 +32,7 @@ fun hoursMinutes(minutes: Int): String =
     if (minutes % 60 == 0) tr(R.string.missed_duration_h, minutes / 60) else tr(R.string.missed_duration_h_m, minutes / 60, "%02d".format(minutes % 60))
 
 /** The Goals row's value: "8,000 steps, 300 active kcal, 8 active hours". */
-fun goalsLine(goals: Goals): String = "%,d steps, %,d active kcal, %d active hours".format(goals.steps, goals.calories, goals.activeHours)
+fun goalsLine(goals: Goals): String = tr(R.string.you_page_steps_active_kcal_active, goals.steps, goals.calories, goals.activeHours)
 
 /** The Sleep goal row's value, with the sleep need Recovery uses beside it: "7 h 30. Your sleep need is 8 h". */
 fun sleepGoalLine(goals: Goals, needMinutes: Int): String =
@@ -44,17 +44,17 @@ fun sleepGoalLine(goals: Goals, needMinutes: Int): String =
  */
 fun healthConnectLine(auto: HealthConnectAuto, now: Long, zone: java.time.ZoneId, locale: java.util.Locale = java.util.Locale.getDefault()): String {
     if (!auto.on) return when (auto.stopped) {
-        HealthConnectAuto.Stopped.PERMISSIONS -> "Stopped. Health Connect permissions were turned off"
-        HealthConnectAuto.Stopped.UNAVAILABLE -> "Stopped. Health Connect isn't available on this phone"
-        null -> "Off. Copies new data after each strap sync"
+        HealthConnectAuto.Stopped.PERMISSIONS -> tr(R.string.you_page_stopped_health_connect_permissions)
+        HealthConnectAuto.Stopped.UNAVAILABLE -> tr(R.string.you_page_stopped_health_connect_isnt)
+        null -> tr(R.string.you_page_off_copies_new_data)
     }
-    val last = auto.lastSynced ?: return "On. Copies new data after each strap sync"
+    val last = auto.lastSynced ?: return tr(R.string.you_page_on_copies_new_data)
     val today = java.time.Instant.ofEpochSecond(now).atZone(zone).toLocalDate()
     val day = java.time.Instant.ofEpochSecond(last).atZone(zone).toLocalDate()
     val clock = org.openstrap.app.ui.dashboard.clockText(last, zone, locale = locale)
-    return "On. Last synced " + when (day) {
+    return tr(R.string.you_page_on_last_synced) + when (day) {
         today -> clock
-        today.minusDays(1) -> "yesterday $clock"
+        today.minusDays(1) -> tr(R.string.you_page_yesterday_clock, clock)
         else -> day.format(java.time.format.DateTimeFormatter.ofPattern("d MMM", locale))
     }
 }
@@ -63,10 +63,10 @@ fun healthConnectLine(auto: HealthConnectAuto, now: Long, zone: java.time.ZoneId
 fun healthConnectSummary(auto: HealthConnectAuto, now: Long, zone: java.time.ZoneId, locale: java.util.Locale = java.util.Locale.getDefault()): String =
     when {
         auto.on && auto.lastSynced != null -> healthConnectLine(auto, now, zone, locale)
-        auto.on -> "On"
-        auto.stopped == HealthConnectAuto.Stopped.PERMISSIONS -> "Stopped. Permissions were turned off"
-        auto.stopped == HealthConnectAuto.Stopped.UNAVAILABLE -> "Stopped. Not available on this phone"
-        else -> "Off"
+        auto.on -> tr(R.string.device_screen_on)
+        auto.stopped == HealthConnectAuto.Stopped.PERMISSIONS -> tr(R.string.you_page_stopped_permissions_were_turned)
+        auto.stopped == HealthConnectAuto.Stopped.UNAVAILABLE -> tr(R.string.you_page_stopped_not_available_on)
+        else -> tr(R.string.common_off)
     }
 
 /** A small heading over a panel of rows, so two panels never sit back to back. */
@@ -128,10 +128,10 @@ fun YouPage(
                     tr(R.string.you_page_health_connect), healthConnectSummary(healthConnectAuto, now, zone), onClick = onHealthConnect, below = true, divider = false,
                     icon = AppIcons.Heartbeat, selected = selected == tr(R.string.you_page_health_connect),
                 )
-                PageRow("Backup", BackupCopy.summary(backup, now, zone), onClick = onBackup, below = true, icon = AppIcons.ShieldCheck, selected = selected == "Backup")
+                PageRow(tr(R.string.main_activity_backup), BackupCopy.summary(backup, now, zone), onClick = onBackup, below = true, icon = AppIcons.ShieldCheck, selected = selected == tr(R.string.main_activity_backup))
             }
         }
-        item { PanelHeading("Help") }
+        item { PanelHeading(tr(R.string.you_page_help)) }
         item {
             PageRows {
                 val now = remember(updates) { System.currentTimeMillis() / 1000 }
@@ -139,7 +139,7 @@ fun YouPage(
                     tr(R.string.firmware_screen_updates), UpdateCopy.summary(updates, installedVersion, now), onClick = onUpdates, below = true, divider = false,
                     icon = AppIcons.ArrowCircleUp, selected = selected == tr(R.string.firmware_screen_updates), dot = updateWaiting,
                 )
-                PageRow(tr(R.string.common_diagnostics), "$logLines lines, for bug reports", onClick = onDiagnostics, below = true, icon = AppIcons.Bug, selected = selected == "Diagnostics")
+                PageRow(tr(R.string.common_diagnostics), tr(R.string.you_page_lines_for_bug_reports, logLines), onClick = onDiagnostics, below = true, icon = AppIcons.Bug, selected = selected == tr(R.string.common_diagnostics))
                 if (onSampleData != null) PageRow(tr(R.string.you_page_load_sample_data), tr(R.string.you_page_debug_builds_only), onClick = onSampleData, below = true, icon = AppIcons.Flask)
             }
         }
